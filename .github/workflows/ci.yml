@@ -12,22 +12,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          
+      - name: Build and Test Go Server
+        working-directory: ./chal-jhootha-server
+        run: |
+          go mod download
+          go test -v ./...
+          go build -v -o server ./cmd/server
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
           
-      - name: Install dependencies
-        run: bun install
-        
-      - name: Typecheck
+      - name: Install and Build Web App
+        working-directory: ./chal-jhootha-web
         run: |
-          bun --cwd packages/shared run tsc --noEmit
-          bun --cwd apps/server run tsc --noEmit
-          bun --cwd apps/web run tsc --noEmit
-          
-      - name: Run Tests
-        run: bun test
-        
-      - name: Build Web App
-        run: bun run --cwd apps/web build
+          bun install
+          bun run build
