@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { LogOut, Mic, MicOff, Radio, RotateCcw, Users, Volume2, VolumeX } from 'lucide-react';
+import { LogOut, Mic, MicOff, Radio, RotateCcw, UserPlus, Users, Volume2, VolumeX } from 'lucide-react';
 import { useLocation, useParams } from 'wouter';
 import { useSession } from '../lib/auth';
+import { createFriendRequest } from '../lib/profile';
 import { ActionBar } from '../components/ActionBar';
 import { BrutalistStamp } from '../components/BrutalistStamp';
 import { Hand } from '../components/Hand';
@@ -268,27 +269,93 @@ export const GameRoom: React.FC = () => {
       {/* ── Verdict overlay ── */}
       {gameState.phase === 'finished' ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-ink/70 p-4 pt-[max(1rem,env(safe-area-inset-top))] text-center backdrop-blur-sm">
-          <section className="my-auto w-full max-w-md border-3 border-ink bg-surface p-4 shadow-[6px_6px_0_var(--color-ink)] sm:p-6">
-            <p className="font-mono text-xs font-bold uppercase tracking-[0.14em] text-evidence-red">Case concluded</p>
-            <h2 className="mt-2 font-display text-[clamp(3rem,14vw,5rem)] leading-[0.82] uppercase text-caution-yellow">Verdict</h2>
-            <div className="mt-6 space-y-2 text-left">
-              {(gameState.winners?.length ? gameState.winners : gameState.players.filter((player) => player.isWinner).map((player) => player.id)).map((id, index) => (
-                <div key={id} className="flex items-center justify-between gap-3 border-2 border-ink bg-paper p-3">
-                  <div className="min-w-0">
-                    <p className="font-mono text-xs font-bold text-evidence-red">#{index + 1}</p>
-                    <p className="truncate font-mono font-bold uppercase">{gameState.players.find((player) => player.id === id)?.name || id}</p>
+          <section className="my-auto w-full max-w-md border-3 border-ink bg-surface p-5 shadow-[6px_6px_0_var(--color-ink)] sm:p-6">
+            <span className="inline-block border border-ink bg-evidence-red px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-white">
+              MATCH CONCLUDED
+            </span>
+            <h2 className="mt-2 font-display text-[clamp(2.5rem,12vw,4.5rem)] leading-none uppercase text-caution-yellow">
+              Verdict
+            </h2>
+
+            <div className="mt-5 space-y-2 text-left">
+              {gameState.players.map((player) => {
+                const isWin = player.isWinner || (gameState.winners?.includes(player.id));
+                const isYou = player.id === playerId;
+                const canAdd = session?.user?.isRegistered && player.userId && player.userId !== session?.user?.id;
+
+                return (
+                  <div
+                    key={player.id}
+                    className={`flex items-center justify-between gap-3 border-2 border-ink p-3 shadow-[2px_2px_0_var(--color-ink)] ${
+                      isWin ? 'bg-caution-yellow/20' : 'bg-paper'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="truncate font-mono text-sm font-bold uppercase">{player.name}</p>
+                        {isYou && (
+                          <span className="border border-ink bg-caution-yellow px-1 font-mono text-[9px] font-bold">
+                            YOU
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-mono text-[10px] text-ink-muted">
+                        {isWin ? '🏆 Victorious' : 'Eliminated'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {isWin && (
+                        <span className="border border-ink bg-confirmed-green px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-white">
+                          Winner
+                        </span>
+                      )}
+                      {canAdd && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await createFriendRequest(player.userId!);
+                              alert(`Friend request sent to ${player.name}!`);
+                            } catch {
+                              alert(`Could not send friend request.`);
+                            }
+                          }}
+                          className="brutal-btn brutal-btn-compact text-[10px] bg-surface text-ink hover:bg-caution-yellow"
+                          title="Add Friend"
+                        >
+                          <UserPlus size={12} className="inline mr-1" />
+                          Add
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <span className="border border-ink bg-confirmed-green px-2 py-1 font-mono text-[10px] font-bold uppercase text-white">Winner</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
-            <div className="mt-6 grid gap-3">
+
+            <div className="mt-6 grid gap-2.5">
               {isHost ? (
-                <button type="button" onClick={resetToLobby} className="brutal-btn flex items-center justify-center gap-2 bg-confirmed-green text-white"><RotateCcw size={19} strokeWidth={2.5} />Play again</button>
+                <button
+                  type="button"
+                  onClick={resetToLobby}
+                  className="brutal-btn flex items-center justify-center gap-2 bg-confirmed-green text-white"
+                >
+                  <RotateCcw size={17} strokeWidth={2.5} />
+                  <span>Play Again</span>
+                </button>
               ) : (
-                <p className="border-2 border-ink bg-paper p-3 font-mono text-xs font-bold leading-5">Waiting for the host to return everyone to the lobby.</p>
+                <p className="border-2 border-ink bg-paper p-3 font-mono text-xs font-bold leading-5">
+                  Waiting for the host to start a new match...
+                </p>
               )}
-              <button type="button" onClick={handleLeaveGame} className="brutal-btn bg-surface text-ink">Exit to home</button>
+              <button
+                type="button"
+                onClick={handleLeaveGame}
+                className="brutal-btn bg-surface text-ink"
+              >
+                Return to Lobby
+              </button>
             </div>
           </section>
         </div>

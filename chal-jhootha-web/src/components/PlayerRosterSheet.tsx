@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Crown, Trophy, Users, WifiOff, X } from 'lucide-react';
+import { Crown, Trophy, UserPlus, Users, WifiOff, X } from 'lucide-react';
 import type { Player } from 'shared';
+import { useSession } from '../lib/auth';
+import { createFriendRequest } from '../lib/profile';
 
 type PlayerRosterSheetProps = {
   open: boolean;
@@ -11,8 +14,27 @@ type PlayerRosterSheetProps = {
   handsCount: Record<string, number>;
 };
 
-export function PlayerRosterSheet({ open, onClose, players, playerId, hostId, handsCount }: PlayerRosterSheetProps) {
+export function PlayerRosterSheet({
+  open,
+  onClose,
+  players,
+  playerId,
+  hostId,
+  handsCount,
+}: PlayerRosterSheetProps) {
   const reduceMotion = useReducedMotion();
+  const { data: session } = useSession();
+  const isRegistered = session?.user?.isRegistered === true;
+  const [friendStatus, setFriendStatus] = useState<Record<string, string>>({});
+
+  const handleAddFriend = async (targetUserId: string) => {
+    try {
+      await createFriendRequest(targetUserId);
+      setFriendStatus((prev) => ({ ...prev, [targetUserId]: 'Sent!' }));
+    } catch {
+      setFriendStatus((prev) => ({ ...prev, [targetUserId]: 'Failed' }));
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -37,38 +59,78 @@ export function PlayerRosterSheet({ open, onClose, players, playerId, hostId, ha
             exit={{ y: 32 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
           >
-            <header className="sticky top-0 flex items-center justify-between gap-4 border-b-[3px] border-ink bg-surface px-4 py-3 sm:px-5">
+            <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b-[3px] border-ink bg-surface px-4 py-3 sm:px-5">
               <div className="flex min-w-0 items-center gap-2">
                 <Users size={20} strokeWidth={2.5} />
-                <h2 id="roster-title" className="font-display text-xl uppercase">Players seated</h2>
-                <span className="border-2 border-ink bg-caution-yellow px-2 py-0.5 font-mono text-xs font-bold">{players.length}</span>
+                <h2 id="roster-title" className="font-display text-xl uppercase">
+                  Players Seated
+                </h2>
+                <span className="border-2 border-ink bg-caution-yellow px-2 py-0.5 font-mono text-xs font-bold">
+                  {players.length}
+                </span>
               </div>
-              <button type="button" className="icon-btn" onClick={onClose} aria-label="Close player roster">
-                <X size={20} strokeWidth={2.5} />
+              <button type="button" className="icon-btn h-8 w-8" onClick={onClose} aria-label="Close roster">
+                <X size={18} strokeWidth={2.5} />
               </button>
             </header>
+
             <ul className="grid gap-2 p-3 sm:grid-cols-2 sm:p-4">
               {players.map((player, index) => {
                 const isYou = player.id === playerId;
                 const isWinner = player.isWinner || player.role === 'winner_spectator';
                 const cardCount = handsCount[player.id] ?? player.handCount ?? 0;
+                const canAdd =
+                  isRegistered &&
+                  player.userId &&
+                  player.userId !== session?.user?.id;
+
                 return (
-                  <li key={player.id} className="flex min-w-0 items-center gap-3 border-2 border-ink bg-paper p-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center border-2 border-ink bg-surface font-display text-sm">
+                  <li
+                    key={player.id}
+                    className="flex min-w-0 items-center gap-3 border-2 border-ink bg-paper p-3 shadow-[2px_2px_0_var(--color-ink)]"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center border-2 border-ink bg-surface font-display text-sm text-evidence-red">
                       {String(index + 1).padStart(2, '0')}
                     </span>
+
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <p className="truncate font-mono text-sm font-bold uppercase">{player.name}</p>
-                        {isYou ? <span className="border border-ink bg-caution-yellow px-1.5 py-0.5 font-mono text-[10px] font-bold">YOU</span> : null}
+                        {isYou && (
+                          <span className="border border-ink bg-caution-yellow px-1 py-0.2 font-mono text-[9px] font-bold">
+                            YOU
+                          </span>
+                        )}
                       </div>
-                      <p className="mt-1 flex items-center gap-1.5 font-mono text-xs text-ink-muted">
-                        {player.isDisconnected ? <WifiOff size={13} strokeWidth={2.5} /> : null}
+                      <p className="mt-0.5 flex items-center gap-1.5 font-mono text-xs text-ink-muted">
+                        {player.isDisconnected ? <WifiOff size={12} strokeWidth={2.5} /> : null}
                         {player.isDisconnected ? 'Away' : player.isAbandoned ? 'Abandoned' : `${cardCount} cards`}
                       </p>
                     </div>
-                    {isWinner ? <Trophy className="shrink-0 text-confirmed-green" size={19} strokeWidth={2.5} aria-label="Winner" /> : null}
-                    {!isWinner && player.id === hostId ? <Crown className="shrink-0 text-caution-yellow" size={19} strokeWidth={2.5} aria-label="Host" /> : null}
+
+                    <div className="flex items-center gap-1.5">
+                      {isWinner && (
+                        <Trophy className="shrink-0 text-confirmed-green" size={18} strokeWidth={2.5} aria-label="Winner" />
+                      )}
+                      {!isWinner && player.id === hostId && (
+                        <Crown className="shrink-0 text-caution-yellow" size={18} strokeWidth={2.5} aria-label="Host" />
+                      )}
+                      {canAdd && (
+                        <button
+                          type="button"
+                          onClick={() => handleAddFriend(player.userId!)}
+                          className="brutal-btn brutal-btn-compact text-[10px] bg-surface text-ink hover:bg-caution-yellow"
+                        >
+                          {friendStatus[player.userId!] ? (
+                            friendStatus[player.userId!]
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              <UserPlus size={12} /> Add
+                            </span>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </li>
                 );
               })}

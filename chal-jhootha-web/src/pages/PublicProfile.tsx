@@ -1,9 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Trophy, UserPlus } from 'lucide-react';
 import { useLocation, useRoute } from 'wouter';
+import { Shield, UserCheck, UserPlus } from 'lucide-react';
 import { useSession } from '../lib/auth';
-import { createFriendRequest, getPublicProfile, type FriendshipState, type PlayerProfile } from '../lib/profile';
-import { PageHeader } from '../components/PageHeader';
+import {
+  createFriendRequest,
+  getPublicProfile,
+  type FriendshipState,
+  type PlayerProfile,
+} from '../lib/profile';
+import { Navbar } from '../components/Navbar';
 
 export const PublicProfile: React.FC = () => {
   const [, params] = useRoute('/players/:handle');
@@ -23,8 +28,12 @@ export const PublicProfile: React.FC = () => {
         setProfile(result.profile);
         setFriendshipState(result.friendshipState);
       })
-      .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : 'Player not found.'); });
-    return () => { active = false; };
+      .catch((cause) => {
+        if (active) setError(cause instanceof Error ? cause.message : 'Player not found.');
+      });
+    return () => {
+      active = false;
+    };
   }, [isPending, params?.handle]);
 
   const requestFriend = async () => {
@@ -35,41 +44,152 @@ export const PublicProfile: React.FC = () => {
       await createFriendRequest(profile.userId);
       setFriendshipState('outgoing');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to send a friend request.');
+      setError(cause instanceof Error ? cause.message : 'Unable to send friend request.');
     } finally {
       setIsRequesting(false);
     }
   };
 
   if (isPending || (!profile && !error)) {
-    return <div className="page-shell"><PageHeader title="Player record" /><main className="page-container animate-pulse"><div className="h-80 border-3 border-ink bg-surface-muted" /></main></div>;
+    return (
+      <div className="page-shell">
+        <Navbar currentTab="profile" />
+        <main className="page-container max-w-2xl animate-pulse pt-6">
+          <div className="h-64 border-3 border-ink bg-surface-muted shadow-[4px_4px_0_var(--color-ink)]" />
+        </main>
+      </div>
+    );
   }
 
   if (!profile) {
-    return <div className="page-shell"><PageHeader title="Player record" /><main className="page-container max-w-xl"><section role="alert" className="brutal-card border-evidence-red p-5"><h1 className="font-display text-3xl uppercase text-evidence-red">Player unavailable</h1><p className="mt-3 font-mono text-sm leading-6 text-ink-muted">{error}</p><button type="button" onClick={() => setLocation('/profile')} className="brutal-btn mt-6 bg-caution-yellow text-ink">Find another player</button></section></main></div>;
+    return (
+      <div className="page-shell">
+        <Navbar currentTab="profile" />
+        <main className="page-container max-w-xl pb-12 pt-6">
+          <section role="alert" className="brutal-card border-evidence-red p-6 text-center">
+            <h1 className="font-display text-3xl uppercase text-evidence-red">Player Unavailable</h1>
+            <p className="mt-2 font-mono text-sm text-ink-muted">{error || 'Player record not found.'}</p>
+            <button
+              type="button"
+              onClick={() => setLocation('/profile?tab=find')}
+              className="brutal-btn mt-5 bg-caution-yellow text-ink"
+            >
+              Search Another Player
+            </button>
+          </section>
+        </main>
+      </div>
+    );
   }
 
-  const rate = profile.gamesPlayed === 0 ? '0%' : `${Math.round((profile.gamesWon / profile.gamesPlayed) * 100)}%`;
-  const friendMessage = friendshipState === 'outgoing' ? 'Friend request sent.' : friendshipState === 'friends' ? 'You are friends.' : friendshipState === 'incoming' ? 'This player has sent you a request. Review it in your profile.' : null;
+  const rate =
+    profile.gamesPlayed === 0
+      ? '0%'
+      : `${Math.round((profile.gamesWon / profile.gamesPlayed) * 100)}%`;
 
   return (
     <div className="page-shell">
-      <PageHeader title="Public player record" backTo="/profile" />
-      <main id="main-content" className="page-container max-w-2xl pb-8">
-        <section className="brutal-card p-4 sm:p-6">
-          <p className="font-mono text-xs font-bold uppercase tracking-[0.14em] text-evidence-red">Public player record</p>
-          <h1 className="mt-3 break-words font-display text-[clamp(2.75rem,14vw,5.5rem)] leading-[0.86] tracking-[-0.06em]">@{profile.handle}</h1>
-          <p className="mt-3 font-mono text-base font-bold uppercase">{profile.displayName}</p>
+      <Navbar currentTab="profile" />
 
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label="Player statistics">
-            <div className="border-3 border-ink bg-paper p-3"><p className="font-mono text-xs font-bold uppercase text-ink-muted">Games</p><p className="mt-2 font-display text-3xl">{profile.gamesPlayed}</p></div>
-            <div className="border-3 border-ink bg-caution-yellow p-3"><p className="font-mono text-xs font-bold uppercase">Wins</p><p className="mt-2 font-display text-3xl">{profile.gamesWon}</p></div>
-            <div className="col-span-2 border-3 border-ink bg-paper p-3 sm:col-span-1"><p className="font-mono text-xs font-bold uppercase text-ink-muted">Rate</p><p className="mt-2 font-display text-3xl">{rate}</p></div>
+      <main id="main-content" className="page-container max-w-2xl pb-12 pt-2">
+        <section className="brutal-card p-6 sm:p-8">
+          <div className="mb-4 inline-flex items-center gap-1.5 border-2 border-ink bg-surface px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-wider text-ink shadow-[2px_2px_0_var(--color-ink)]">
+            <Shield size={13} className="text-confirmed-green" strokeWidth={2.5} />
+            <span>PLAYER DOSSIER</span>
           </div>
 
-          {session?.user.isRegistered && friendshipState === 'none' ? <button type="button" onClick={() => void requestFriend()} disabled={isRequesting} className="brutal-btn mt-6 flex w-full items-center justify-center gap-2 bg-confirmed-green text-white"><UserPlus size={19} strokeWidth={2.5} />{isRequesting ? 'Sending request' : 'Add friend'}</button> : null}
-          {friendMessage ? <p className="mt-6 flex items-center gap-2 border-2 border-ink bg-paper p-3 font-mono text-sm font-bold"><Trophy size={18} className="text-caution-yellow" strokeWidth={2.5} />{friendMessage}</p> : null}
-          {error ? <p role="alert" className="mt-4 border-2 border-ink bg-evidence-red p-3 font-mono text-xs font-bold text-white">{error}</p> : null}
+          <h1 className="break-words font-display text-[clamp(2.5rem,8vw,4.5rem)] leading-none tracking-tight">
+            @{profile.handle}
+          </h1>
+          <p className="mt-2 font-mono text-sm font-bold uppercase text-ink-muted">
+            {profile.displayName}
+          </p>
+
+          {/* Stats Bar */}
+          <div className="mt-6 grid grid-cols-3 gap-3" aria-label="Player Statistics">
+            <div className="border-2 border-ink bg-paper p-3 text-center shadow-[2px_2px_0_var(--color-ink)]">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-ink-muted">
+                MATCHES
+              </span>
+              <p className="mt-1 font-display text-2xl sm:text-3xl">{profile.gamesPlayed}</p>
+            </div>
+
+            <div className="border-2 border-ink bg-caution-yellow p-3 text-center shadow-[2px_2px_0_var(--color-ink)]">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-ink">
+                WINS
+              </span>
+              <p className="mt-1 font-display text-2xl sm:text-3xl">{profile.gamesWon}</p>
+            </div>
+
+            <div className="border-2 border-ink bg-paper p-3 text-center shadow-[2px_2px_0_var(--color-ink)]">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-ink-muted">
+                WIN RATE
+              </span>
+              <p className="mt-1 font-display text-2xl sm:text-3xl">{rate}</p>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="mt-6 border-t-2 border-ink pt-5">
+            {session?.user.isRegistered && friendshipState === 'none' && (
+              <button
+                type="button"
+                onClick={() => void requestFriend()}
+                disabled={isRequesting}
+                className="brutal-btn flex w-full items-center justify-center gap-2 bg-confirmed-green text-white"
+              >
+                <UserPlus size={18} strokeWidth={2.5} />
+                <span>{isRequesting ? 'Sending Request...' : 'Send Friend Request'}</span>
+              </button>
+            )}
+
+            {friendshipState === 'friends' && (
+              <div className="flex items-center justify-center gap-2 border-2 border-ink bg-confirmed-green/20 p-3 font-mono text-xs font-bold text-confirmed-green">
+                <UserCheck size={16} strokeWidth={2.5} />
+                <span>Connected as Friend</span>
+              </div>
+            )}
+
+            {friendshipState === 'outgoing' && (
+              <div className="border-2 border-ink bg-paper p-3 text-center font-mono text-xs font-bold uppercase text-ink-muted">
+                Friend Request Pending
+              </div>
+            )}
+
+            {friendshipState === 'incoming' && (
+              <div className="flex items-center justify-between border-2 border-ink bg-caution-yellow/30 p-3 font-mono text-xs font-bold">
+                <span>Player sent you a friend request!</span>
+                <button
+                  type="button"
+                  onClick={() => setLocation('/profile?tab=friends')}
+                  className="brutal-btn brutal-btn-compact text-xs bg-ink text-paper"
+                >
+                  Review Request
+                </button>
+              </div>
+            )}
+
+            {!session?.user.isRegistered && (
+              <div className="border-2 border-ink bg-paper p-3 text-center">
+                <p className="font-mono text-xs text-ink-muted">
+                  Sign in to connect and send friend requests.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setLocation('/auth')}
+                  className="brutal-btn brutal-btn-compact mt-2 bg-caution-yellow text-xs text-ink"
+                >
+                  Sign In
+                </button>
+              </div>
+            )}
+          </div>
+
+          {error && (
+            <p role="alert" className="mt-4 border-2 border-ink bg-evidence-red p-3 font-mono text-xs font-bold text-white">
+              {error}
+            </p>
+          )}
         </section>
       </main>
     </div>
