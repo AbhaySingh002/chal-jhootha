@@ -8,40 +8,40 @@ export const Stack: React.FC = () => {
   
   if (!gameState || gameState.stackCount === 0) {
     return (
-      <div className="w-32 h-48 border-4 border-dashed border-ink/20 rounded-2xl flex items-center justify-center">
-        <span className="text-ink/30 font-bold uppercase tracking-widest text-sm">Empty Stack</span>
+      <div className="flex items-center justify-center border-3 border-dashed border-ink-muted/60" style={{ width: 'clamp(5rem, 15vw, 7rem)', height: 'clamp(7rem, 22vw, 10rem)' }}>
+        <span className="px-2 text-center font-mono text-xs font-bold uppercase tracking-[0.12em] text-ink-muted">Empty stack</span>
       </div>
     );
   }
 
   // Create a visually fanned stack
-  const stackCards = Array.from({ length: Math.min(gameState.stackCount, 15) });
+  const stackCards = Array.from({ length: Math.min(gameState.stackCount, 7) });
 
   return (
-    <div className="relative w-32 h-48 flex items-center justify-center">
+    <div className="relative flex items-center justify-center" style={{ width: 'clamp(5rem, 15vw, 7rem)', height: 'clamp(7rem, 22vw, 10rem)' }}>
       <AnimatePresence>
         {stackCards.map((_, i) => (
           <motion.div
             key={i}
             className="absolute"
-            initial={{ scale: 1.5, opacity: 0, y: -50 }}
+            initial={{ scale: 1.15, opacity: 0, y: -20 }}
             animate={{ 
               scale: 1, 
               opacity: 1, 
               y: 0,
-              rotate: (i % 5) * 5 - 10,
-              x: (i % 3) * 4 - 6
+              rotate: (i % 5) * 4 - 8,
+              x: (i % 3) * 3 - 4
             }}
-            transition={{ duration: 0.2, delay: i * 0.02 }}
+            transition={{ duration: 0.16, delay: i * 0.015 }}
           >
             <Card faceDown />
           </motion.div>
         ))}
       </AnimatePresence>
-      <div className="absolute -top-12 bg-white text-ink font-bold font-sans px-4 py-2 border-[3px] border-ink rounded-xl shadow-[4px_4px_0_#14140F] flex flex-col items-center leading-tight whitespace-nowrap z-10">
-        <span className="text-xs uppercase tracking-wider text-neutral-500">Claimed Rank</span>
-        <span className="text-xl font-display font-black text-evidence-red">{gameState.claimedRank}s</span>
-        <span className="text-[10px] uppercase font-mono mt-1 bg-neutral-200 px-2 py-0.5 rounded-full">{gameState.stackCount} cards in stack</span>
+      <div className="absolute -top-11 z-10 flex flex-col items-center whitespace-nowrap border-2 border-ink bg-surface px-3 py-2 font-sans font-bold leading-tight shadow-[3px_3px_0_var(--color-ink)]">
+        <span className="text-xs uppercase tracking-wider text-ink-muted">Claimed rank</span>
+        <span className="font-display text-xl text-evidence-red">{gameState.claimedRank}s</span>
+        <span className="mt-1 border border-ink bg-paper px-1.5 py-0.5 font-mono text-[10px] uppercase">{gameState.stackCount} in stack</span>
       </div>
     </div>
   );

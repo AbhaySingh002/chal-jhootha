@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"chal-jhootha-server/internal/auth"
 	"chal-jhootha-server/internal/teststore"
@@ -90,4 +91,96 @@ func TestCrossSiteSessionCookieIsSecure(t *testing.T) {
 	require.Len(t, cookies, 1)
 	require.True(t, cookies[0].Secure)
 	require.Equal(t, http.SameSiteNoneMode, cookies[0].SameSite)
+}
+
+func guestCookie(t *testing.T, svc *auth.Service) *http.Cookie {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	svc.HandleGuest(rec, httptest.NewRequest(http.MethodPost, "/api/auth/guest", bytes.NewBufferString(`{"name":"ZED"}`)))
+	require.Equal(t, http.StatusCreated, rec.Code)
+	cookies := rec.Result().Cookies()
+	require.Len(t, cookies, 1)
+	return cookies[0]
+}
+
+func TestWsTicketRequiresAuth(t *testing.T) {
+	st := teststore.Open(t)
+	defer st.Close()
+	svc := &auth.Service{Store: st}
+
+	rec := httptest.NewRecorder()
+	svc.HandleWsTicket(rec, httptest.NewRequest(http.MethodPost, "/api/auth/ws-ticket", nil))
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestWsTicketExpiredAndReusedAreRejected(t *testing.T) {
+	st := teststore.Open(t)
+	defer st.Close()
+	svc := &auth.Service{Store: st}
+	cookie := guestCookie(t, svc)
+
+	sessionReq := httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
+	sessionReq.AddCookie(cookie)
+	user, _, ok := svc.UserFromRequest(sessionReq)
+	require.True(t, ok)
+
+	mint := httptest.NewRecorder()
+	mintReq := httptest.NewRequest(http.MethodPost, "/api/auth/ws-ticket", nil)
+	mintReq.AddCookie(cookie)
+	svc.HandleWsTicket(mint, mintReq)
+	require.Equal(t, http.StatusOK, mint.Code)
+	var minted struct {
+		Ticket    string `json:"ticket"`
+		ExpiresIn int    `json:"expiresIn"`
+	}
+	require.NoError(t, json.Unmarshal(mint.Body.Bytes(), &minted))
+	require.NotEmpty(t, minted.Ticket)
+	require.Equal(t, 45, minted.ExpiresIn)
+	require.NotContains(t, mint.Body.String(), cookie.Value)
+
+	first := httptest.NewRequest(http.MethodGet, "/ws?ticket="+minted.Ticket, nil)
+	_, _, ok = svc.UserFromRequest(first)
+	require.True(t, ok)
+
+	reuse := httptest.NewRequest(http.MethodGet, "/ws?ticket="+minted.Ticket, nil)
+	_, _, ok = svc.UserFromRequest(reuse)
+	require.False(t, ok)
+
+	stillSession := httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
+	stillSession.AddCookie(cookie)
+	_, _, ok = svc.UserFromRequest(stillSession)
+	require.True(t, ok, "session cookie still authenticates after ticket consume")
+
+	expiredTicket := "expired-ticket"
+	require.NoError(t, st.PutWSTicket(expiredTicket, user.ID, -time.Second))
+	expiredReq := httptest.NewRequest(http.MethodGet, "/ws?ticket="+expiredTicket, nil)
+	_, _, ok = svc.UserFromRequest(expiredReq)
+	require.False(t, ok)
+}
+
+func TestLogoutInvalidatesOutstandingWsTickets(t *testing.T) {
+	st := teststore.Open(t)
+	defer st.Close()
+	svc := &auth.Service{Store: st}
+	cookie := guestCookie(t, svc)
+
+	mint := httptest.NewRecorder()
+	mintReq := httptest.NewRequest(http.MethodPost, "/api/auth/ws-ticket", nil)
+	mintReq.AddCookie(cookie)
+	svc.HandleWsTicket(mint, mintReq)
+	require.Equal(t, http.StatusOK, mint.Code)
+	var minted struct {
+		Ticket string `json:"ticket"`
+	}
+	require.NoError(t, json.Unmarshal(mint.Body.Bytes(), &minted))
+
+	logout := httptest.NewRecorder()
+	logoutReq := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	logoutReq.AddCookie(cookie)
+	svc.HandleLogout(logout, logoutReq)
+	require.Equal(t, http.StatusOK, logout.Code)
+
+	ticketReq := httptest.NewRequest(http.MethodGet, "/ws?ticket="+minted.Ticket, nil)
+	_, _, ok := svc.UserFromRequest(ticketReq)
+	require.False(t, ok)
 }

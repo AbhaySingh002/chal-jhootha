@@ -17,7 +17,7 @@ async function parse(res: Response) {
   if (!res.ok) {
     throw new Error((data as { error?: string }).error || 'Request failed');
   }
-  return data as { user?: AuthUser | null; activeRoomCode?: string; error?: string };
+  return data as { user?: AuthUser | null; activeRoomCode?: string; error?: string; ticket?: string; expiresIn?: number };
 }
 
 export async function ensureGuest(name?: string) {
@@ -45,6 +45,18 @@ export async function register(email: string, password: string, name: string, ha
     headers: jsonHeaders,
     body: JSON.stringify({ email, password, name, handle }),
   }));
+}
+
+export async function fetchWsTicket() {
+  const data = await parse(await fetch(apiURL('/api/auth/ws-ticket'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: jsonHeaders,
+  }));
+  if (!data.ticket) {
+    throw new Error('ticket failed');
+  }
+  return data.ticket;
 }
 
 export async function fetchSession() {

@@ -78,7 +78,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       sessionStorage.removeItem('playerId');
       set({ roomCode, lastError: null, gameState: null, playerId: null, rejoinToken: null });
     }
-    connectSocket();
+    await connectSocket();
     sendEvent({
       type: 'join_room',
       roomCode,
@@ -95,7 +95,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     sessionStorage.removeItem('roomCode');
     sessionStorage.removeItem('rejoinToken');
     set({ lastError: null, roomCode: null, gameState: null, playerId: null, rejoinToken: null, lastSeq: 0 });
-    connectSocket();
+    await connectSocket();
     sendEvent({
       type: 'create_room',
       playerName,

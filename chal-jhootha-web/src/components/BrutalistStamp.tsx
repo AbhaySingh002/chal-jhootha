@@ -22,11 +22,11 @@ export const BrutalistStamp: React.FC<BrutalistStampProps> = ({ text, color = 'r
           initial={{ scale: 3, opacity: 0, rotate: -20 }}
           animate={{ scale: 1, opacity: 1, rotate: -15 }}
           exit={{ scale: 0.8, opacity: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 15 }}
+          transition={{ type: "spring", stiffness: 300, damping: 20 }}
           className="pointer-events-none fixed inset-0 flex items-center justify-center z-50"
         >
-          <div className={`border-8 p-4 ${colorMap[color]} bg-paper/90`}>
-            <h1 className="text-8xl md:text-[150px] font-display font-black uppercase tracking-tighter leading-none" style={{ textShadow: `6px 6px 0 ${color === 'black' ? '#EDEBE3' : '#14140F'}` }}>
+          <div className={`border-[6px] p-3 sm:border-8 sm:p-5 ${colorMap[color]} bg-paper/95`}>
+            <h1 className="font-display text-[clamp(3.5rem,20vw,9.5rem)] font-black uppercase tracking-[-0.07em] leading-[0.8]" style={{ textShadow: `4px 4px 0 ${color === 'black' ? 'var(--color-surface)' : 'var(--color-ink)'}` }}>
               {text}
             </h1>
           </div>

@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	CookieName = "cj_session"
-	SessionTTL = 30 * 24 * time.Hour
+	CookieName  = "cj_session"
+	SessionTTL  = 30 * 24 * time.Hour
+	WSTicketTTL = 45 * time.Second
 )
 
 type Service struct {
@@ -48,8 +49,14 @@ func (s *Service) UserFromRequest(r *http.Request) (*store.User, string, bool) {
 		return nil, "", false
 	}
 	userID, ok, err := s.Store.GetSession(token)
-	if err != nil || !ok {
+	if err != nil {
 		return nil, token, false
+	}
+	if !ok {
+		userID, ok, err = s.Store.ConsumeWSTicket(token)
+		if err != nil || !ok {
+			return nil, token, false
+		}
 	}
 	u, err := s.Store.GetUser(userID)
 	if err != nil || u == nil {
@@ -64,6 +71,9 @@ func tokenFromRequest(r *http.Request) string {
 	}
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(h), "bearer ") {
 		return strings.TrimSpace(h[7:])
+	}
+	if ticket := strings.TrimSpace(r.URL.Query().Get("ticket")); ticket != "" {
+		return ticket
 	}
 	return ""
 }
@@ -258,11 +268,37 @@ func (s *Service) HandleGuest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) HandleLogout(w http.ResponseWriter, r *http.Request) {
-	if c, err := r.Cookie(CookieName); err == nil {
+	if u, token, ok := s.UserFromRequest(r); ok {
+		_ = s.Store.DeleteWSTicketsForUser(u.ID)
+		if token != "" {
+			_ = s.Store.DeleteSession(token)
+		}
+	} else if c, err := r.Cookie(CookieName); err == nil {
 		_ = s.Store.DeleteSession(c.Value)
 	}
 	s.clearCookie(w)
 	writeJSON(w, 200, map[string]string{"ok": "true"})
+}
+
+func (s *Service) HandleWsTicket(w http.ResponseWriter, r *http.Request) {
+	u, _, ok := s.UserFromRequest(r)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+		return
+	}
+	ticket, err := randomToken()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "ticket failed"})
+		return
+	}
+	if err := s.Store.PutWSTicket(ticket, u.ID, WSTicketTTL); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "ticket failed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ticket":    ticket,
+		"expiresIn": int(WSTicketTTL.Seconds()),
+	})
 }
 
 func (s *Service) HandleSession(w http.ResponseWriter, r *http.Request) {

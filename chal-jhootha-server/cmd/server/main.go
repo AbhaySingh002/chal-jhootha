@@ -64,6 +64,7 @@ func main() {
 	r.Post("/api/auth/login", authSvc.HandleLogin)
 	r.Post("/api/auth/guest", authSvc.HandleGuest)
 	r.Post("/api/auth/logout", authSvc.HandleLogout)
+	r.Post("/api/auth/ws-ticket", authSvc.HandleWsTicket)
 	r.Get("/api/auth/session", authSvc.HandleSession)
 	r.Get("/api/profile/me", authSvc.HandleMyProfile)
 	r.Post("/api/profile/me", authSvc.HandleCreateProfile)

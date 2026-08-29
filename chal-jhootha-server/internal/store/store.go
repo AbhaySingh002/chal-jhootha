@@ -190,6 +190,39 @@ func (s *Store) DeleteSession(token string) error {
 	return err
 }
 
+func (s *Store) PutWSTicket(ticket, userID string, ttl time.Duration) error {
+	if ticket == "" {
+		return errors.New("ticket is required")
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO ws_tickets (ticket_hash, user_id, expires_at) VALUES ($1, $2, $3)`,
+		sessionTokenHash(ticket), userID, time.Now().Add(ttl),
+	)
+	return err
+}
+
+func (s *Store) ConsumeWSTicket(ticket string) (userID string, ok bool, err error) {
+	if ticket == "" {
+		return "", false, nil
+	}
+	err = s.db.QueryRow(
+		`DELETE FROM ws_tickets WHERE ticket_hash = $1 AND expires_at > NOW() RETURNING user_id`,
+		sessionTokenHash(ticket),
+	).Scan(&userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return userID, true, nil
+}
+
+func (s *Store) DeleteWSTicketsForUser(userID string) error {
+	_, err := s.db.Exec(`DELETE FROM ws_tickets WHERE user_id = $1`, userID)
+	return err
+}
+
 func (s *Store) SaveRoom(code, snapshot string, seq int) error {
 	_, err := s.db.Exec(
 		`INSERT INTO rooms (code, snapshot, seq, updated_at) VALUES ($1, $2::jsonb, $3, NOW())

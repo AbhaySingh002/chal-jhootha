@@ -14,8 +14,12 @@ function App() {
       <Route path="/profile" component={Profile} />
       <Route path="/players/:handle" component={PublicProfile} />
       <Route>
-        <div className="flex items-center justify-center min-h-screen bg-paper text-ink font-display text-4xl">
-          404 NOT FOUND
+        <div className="page-shell flex items-center justify-center p-4 text-center">
+          <section className="brutal-card w-full max-w-md p-6">
+            <p className="font-mono text-xs font-bold uppercase tracking-[0.14em] text-evidence-red">Missing case file</p>
+            <h1 className="mt-3 font-display text-4xl uppercase">404 not found</h1>
+            <a href="/" className="brutal-btn mt-6 inline-flex items-center bg-caution-yellow text-ink">Return home</a>
+          </section>
         </div>
       </Route>
     </Switch>

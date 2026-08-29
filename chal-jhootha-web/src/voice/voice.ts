@@ -10,7 +10,9 @@ type VoiceSignal = {
 export class RoomVoice {
   private stream: MediaStream | null = null;
   private muted = true;
+  private speakerMuted = false;
   private peers = new Map<string, RTCPeerConnection>();
+  private remoteAudio = new Map<string, HTMLAudioElement>();
   private send: (kind: string, payload?: unknown, target?: string) => void;
   private selfId: string;
 
@@ -21,6 +23,7 @@ export class RoomVoice {
   }
 
   async join() {
+    if (this.stream) return;
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     this.stream.getAudioTracks().forEach((t) => { t.enabled = !this.muted; });
     this.send('join');
@@ -30,6 +33,8 @@ export class RoomVoice {
     this.send('leave');
     this.peers.forEach((pc) => pc.close());
     this.peers.clear();
+    this.remoteAudio.forEach((audio) => audio.remove());
+    this.remoteAudio.clear();
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
     window.removeEventListener('cj-voice', this.onSignal as EventListener);
@@ -39,6 +44,13 @@ export class RoomVoice {
     this.muted = muted;
     this.stream?.getAudioTracks().forEach((t) => { t.enabled = !muted; });
     this.send('mute', { muted });
+  }
+
+  setSpeakerMuted(muted: boolean) {
+    this.speakerMuted = muted;
+    this.remoteAudio.forEach((audio) => {
+      audio.muted = muted;
+    });
   }
 
   private onSignal = (ev: Event) => {
@@ -55,6 +67,7 @@ export class RoomVoice {
     if (signal.kind === 'leave') {
       this.peers.get(signal.fromUserId)?.close();
       this.peers.delete(signal.fromUserId);
+      this.removeRemoteAudio(signal.fromUserId);
       return;
     }
     if (signal.kind === 'offer') {
@@ -92,16 +105,25 @@ export class RoomVoice {
       if (e.candidate) this.send('ice', e.candidate, peerId);
     };
     pc.ontrack = (e) => {
-      let el = document.getElementById(`voice-${peerId}`) as HTMLAudioElement | null;
+      let el = this.remoteAudio.get(peerId);
       if (!el) {
         el = document.createElement('audio');
-        el.id = `voice-${peerId}`;
+        el.id = `chal-jhootha-voice-${peerId}`;
         el.autoplay = true;
         document.body.appendChild(el);
+        this.remoteAudio.set(peerId, el);
       }
+      el.muted = this.speakerMuted;
       el.srcObject = e.streams[0];
+      void el.play().catch(() => undefined);
     };
     this.peers.set(peerId, pc);
     return pc;
+  }
+
+  private removeRemoteAudio(peerId: string) {
+    const audio = this.remoteAudio.get(peerId);
+    audio?.remove();
+    this.remoteAudio.delete(peerId);
   }
 }

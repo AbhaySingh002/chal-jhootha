@@ -19,11 +19,11 @@ const suitSymbols: Record<string, string> = {
   c: '♣',
 };
 
-const suitColors: Record<string, string> = {
-  s: 'text-neutral-900',
-  h: 'text-red-600',
-  d: 'text-red-600',
-  c: 'text-neutral-900',
+const suitIsRed: Record<string, boolean> = {
+  s: false,
+  h: true,
+  d: true,
+  c: false,
 };
 
 export const Card: React.FC<CardProps> = ({
@@ -34,34 +34,54 @@ export const Card: React.FC<CardProps> = ({
   className,
   style,
 }) => {
+  const interactive = Boolean(onClick);
   return (
     <motion.div
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (interactive && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          onClick?.();
+        }
+      }}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-pressed={interactive ? selected : undefined}
+      aria-label={card ? `${card.rank} of ${suitSymbols[card.suit]}` : faceDown ? 'Face-down card' : undefined}
       className={clsx(
-        'relative w-16 h-24 sm:w-24 sm:h-36 cursor-pointer flex-shrink-0 origin-bottom',
-        'border-[3px] border-ink bg-white select-none rounded-xl sm:rounded-2xl overflow-hidden',
-        selected ? 'shadow-[0px_-10px_20px_rgba(0,0,0,0.15)] ring-4 ring-caution-yellow ring-offset-2 ring-offset-paper' : 'shadow-[4px_4px_0_var(--color-ink)]',
+        'relative h-24 w-16 flex-shrink-0 origin-bottom select-none overflow-hidden border-[3px] border-ink bg-surface sm:h-32 sm:w-20',
+        interactive ? 'cursor-pointer' : 'cursor-default',
+        selected ? 'shadow-[0px_-8px_0_var(--color-caution-yellow)] ring-2 ring-caution-yellow ring-offset-2 ring-offset-paper' : 'shadow-[3px_3px_0_var(--color-ink)]',
         className
       )}
       style={style}
-      layout
-      initial={{ opacity: 0, y: 100 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+      layout="position"
+      initial={{ opacity: 0, y: 16 }}
+      transition={{ type: 'spring', stiffness: 380, damping: 28 }}
       animate={{ y: selected ? -20 : 0, scale: selected ? 1.05 : 1, opacity: 1 }}
-      whileHover={{ y: selected ? -20 : -10, scale: 1.05 }}
+      whileHover={interactive ? { y: selected ? -20 : -6, scale: 1.03 } : undefined}
       whileTap={{ scale: 0.95 }}
       exit={{ opacity: 0, y: -100, scale: 0.8 }}
     >
       {faceDown || !card ? (
         // Card Back (Confidential)
         <div className="w-full h-full bg-ink flex items-center justify-center p-2">
-          <div className="border-2 border-paper/30 rounded-lg sm:rounded-xl w-full h-full flex flex-col items-center justify-center bg-[repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(255,255,255,0.05)_4px,rgba(255,255,255,0.05)_8px)]">
+          <div
+            className="w-full h-full flex flex-col items-center justify-center"
+            style={{
+              border: '2px solid var(--card-back-border)',
+              background: `repeating-linear-gradient(45deg, transparent, transparent 4px, var(--card-back-stripe) 4px, var(--card-back-stripe) 8px)`,
+            }}
+          >
             <span className="text-white font-mono text-[8px] sm:text-xs font-bold tracking-widest text-center rotate-45 opacity-80">EVIDENCE</span>
           </div>
         </div>
       ) : (
-        // Card Front
-        <div className={clsx('w-full h-full flex flex-col justify-between p-1.5 sm:p-2', suitColors[card.suit])}>
+        // Card Front — uses CSS variables for dark-mode-aware suit colors
+        <div
+          className="w-full h-full flex flex-col justify-between p-1.5 sm:p-2"
+          style={{ color: suitIsRed[card.suit] ? 'var(--suit-red)' : 'var(--suit-black)' }}
+        >
           <div className="flex flex-col items-center leading-none self-start">
             <span className="text-xl sm:text-3xl font-black font-sans tracking-tighter">{card.rank}</span>
             <span className="text-sm sm:text-2xl mt-0.5">{suitSymbols[card.suit]}</span>
