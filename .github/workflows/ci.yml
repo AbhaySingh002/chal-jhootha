@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+          
+      - name: Install dependencies
+        run: bun install
+        
+      - name: Typecheck
+        run: |
+          bun --cwd packages/shared run tsc --noEmit
+          bun --cwd apps/server run tsc --noEmit
+          bun --cwd apps/web run tsc --noEmit
+          
+      - name: Run Tests
+        run: bun test
+        
+      - name: Build Web App
+        run: bun run --cwd apps/web build

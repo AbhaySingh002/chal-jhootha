@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "mobile-first-design",
+  "owner": "secondsky",
+  "repo": "claude-skills",
+  "path": "plugins/mobile-first-design/skills/mobile-first-design",
+  "branch": "main",
+  "sha": "17e8bfd807769dfe363246751c06db2deb45baf4",
+  "source": "manual"
+}

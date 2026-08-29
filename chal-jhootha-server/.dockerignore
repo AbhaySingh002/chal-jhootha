@@ -1,0 +1,7 @@
+.git
+.env
+rooms.sqlite
+rooms.sqlite-*
+server
+tmp
+coverage

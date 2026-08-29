@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Build output and test coverage
+dist/
+coverage/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Operating system files
+.DS_Store
