@@ -93,13 +93,13 @@ type BaseClientEvent struct {
 
 type JoinRoomEvent struct {
 	BaseClientEvent
-	PlayerName  string  `json:"playerName" validate:"required"`
+	PlayerName  string  `json:"playerName"`
 	RejoinToken *string `json:"rejoinToken,omitempty"`
 }
 
 type CreateRoomEvent struct {
 	BaseClientEvent
-	PlayerName  string `json:"playerName" validate:"required"`
+	PlayerName  string `json:"playerName"`
 	DeckCount   int    `json:"deckCount,omitempty"`
 	WinnerCount int    `json:"winnerCount,omitempty"`
 }

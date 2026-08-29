@@ -18,6 +18,7 @@ export interface Friendship {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(apiURL(path), {
     credentials: 'include',
+    cache: 'no-store',
     ...init,
     headers: {
       'Content-Type': 'application/json',

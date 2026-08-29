@@ -60,7 +60,7 @@ export async function fetchWsTicket() {
 }
 
 export async function fetchSession() {
-  return parse(await fetch(apiURL('/api/auth/session'), { credentials: 'include' }));
+  return parse(await fetch(apiURL('/api/auth/session'), { credentials: 'include', cache: 'no-store' }));
 }
 
 export async function signOut() {

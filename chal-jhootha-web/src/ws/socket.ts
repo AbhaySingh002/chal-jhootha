@@ -1,5 +1,6 @@
 import type { ClientEvent, ServerEvent } from 'shared';
 import { fetchWsTicket } from '../lib/auth';
+import { PROTOCOL_VERSION } from 'shared';
 import { useGameStore } from '../state/gameStore';
 
 let socket: WebSocket | null = null;
@@ -108,6 +109,7 @@ export async function connectSocket(url = wsUrl()) {
             playerName: '',
             rejoinToken,
             clientMsgId: crypto.randomUUID(),
+            protocolVersion: PROTOCOL_VERSION,
           });
           void connectSocket();
         }, delay);

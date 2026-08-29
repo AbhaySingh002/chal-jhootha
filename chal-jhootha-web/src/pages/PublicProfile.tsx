@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation, useRoute } from 'wouter';
+import { useLocation, useParams } from 'wouter';
 import { Shield, UserCheck, UserPlus } from 'lucide-react';
 import { useSession } from '../lib/auth';
 import {
@@ -11,7 +11,7 @@ import {
 import { Navbar } from '../components/Navbar';
 
 export const PublicProfile: React.FC = () => {
-  const [, params] = useRoute('/players/:handle');
+  const { handle } = useParams<{ handle: string }>();
   const [, setLocation] = useLocation();
   const { data: session, isPending } = useSession();
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
@@ -20,9 +20,9 @@ export const PublicProfile: React.FC = () => {
   const [isRequesting, setIsRequesting] = useState(false);
 
   useEffect(() => {
-    if (isPending || !params?.handle) return;
+    if (isPending || !handle) return;
     let active = true;
-    void getPublicProfile(params.handle)
+    void getPublicProfile(handle)
       .then((result) => {
         if (!active) return;
         setProfile(result.profile);
@@ -34,7 +34,7 @@ export const PublicProfile: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [isPending, params?.handle]);
+  }, [isPending, handle]);
 
   const requestFriend = async () => {
     if (!profile) return;

@@ -158,6 +158,10 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 					sess.sendError(base.ClientMsgID, "INVALID_PAYLOAD", "Invalid payload")
 					continue
 				}
+				if err := validate.Struct(ev); err != nil {
+					sess.sendError(base.ClientMsgID, "INVALID_PAYLOAD", "Validation failed")
+					continue
+				}
 				roomCode := generateRoomCode(rm)
 				sess.RoomCode = roomCode
 				rmRoom := rm.GetOrCreateRoom(roomCode)
@@ -200,6 +204,10 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 				var ev ws.JoinRoomEvent
 				if err := json.Unmarshal(msgBytes, &ev); err != nil {
 					sess.sendError(base.ClientMsgID, "INVALID_PAYLOAD", "Invalid payload")
+					continue
+				}
+				if err := validate.Struct(ev); err != nil {
+					sess.sendError(base.ClientMsgID, "INVALID_PAYLOAD", "Validation failed")
 					continue
 				}
 				if ev.RoomCode == "" {
@@ -322,6 +330,10 @@ func (s *session) forwardToRoom(rm *room.Manager, clientMsgID string, msgBytes [
 		return
 	}
 	ev := parse()
+	if err := validate.Struct(ev); err != nil {
+		s.sendError(clientMsgID, "INVALID_PAYLOAD", "Validation failed")
+		return
+	}
 	select {
 	case rmRoom.Inbox <- room.RoomMessage{
 		ConnectionID: s.ConnID,
