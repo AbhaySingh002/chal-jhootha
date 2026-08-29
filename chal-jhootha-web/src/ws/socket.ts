@@ -11,8 +11,8 @@ let connectLock: Promise<void> | null = null;
 
 function wsUrl() {
   if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL as string;
-  if (import.meta.env.VITE_API_URL) {
-    const api = new URL(import.meta.env.VITE_API_URL as string);
+  if (import.meta.env.VITE_API_ORIGIN) {
+    const api = new URL(import.meta.env.VITE_API_ORIGIN as string);
     const proto = api.protocol === 'https:' ? 'wss' : 'ws';
     return `${proto}://${api.host}/ws`;
   }
