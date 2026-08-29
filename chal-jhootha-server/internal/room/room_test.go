@@ -3,6 +3,7 @@ package room_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -497,4 +498,110 @@ func TestMultiWinnerSpectatorFlow(t *testing.T) {
 	assert.Equal(t, 2, state.WinnerCount)
 	assert.Equal(t, 3, len(state.Players))
 	assert.Equal(t, ws.RoleActive, state.YourRole)
+}
+
+func TestTableReactionsBroadcastAndRateLimit(t *testing.T) {
+	r := room.NewRoom("REACT", nil)
+	defer close(r.CloseReq)
+	a, _, outA := join(t, r, "ua", "ALICE", "ca")
+	_, _, outB := join(t, r, "ub", "BOB", "cb")
+	drain(outA)
+	drain(outB)
+
+	r.Inbox <- room.RoomMessage{
+		ConnectionID: "ca",
+		PlayerID:     a,
+		ClientMsg:    "reaction-1",
+		Event: &ws.ReactionEvent{
+			BaseClientEvent: ws.BaseClientEvent{ClientMsgID: "reaction-1", Type: "reaction"},
+			Emoji:           "🔥",
+		},
+	}
+	broadcast := waitType(t, outB, "reaction")
+	var reaction ws.ReactionBroadcast
+	require.NoError(t, json.Unmarshal(broadcast, &reaction))
+	assert.Equal(t, "🔥", reaction.Emoji)
+	assert.Equal(t, a, reaction.PlayerID)
+	assert.Equal(t, "ALICE", reaction.PlayerName)
+
+	r.Inbox <- room.RoomMessage{
+		ConnectionID: "ca",
+		PlayerID:     a,
+		ClientMsg:    "reaction-too-fast",
+		Event: &ws.ReactionEvent{
+			BaseClientEvent: ws.BaseClientEvent{ClientMsgID: "reaction-too-fast", Type: "reaction"},
+			Emoji:           "😂",
+		},
+	}
+	rateLimited := waitType(t, outA, "error")
+	var rateLimitError ws.ErrorEvent
+	require.NoError(t, json.Unmarshal(rateLimited, &rateLimitError))
+	assert.Equal(t, "REACTION_RATE_LIMITED", rateLimitError.Code)
+
+	r.Inbox <- room.RoomMessage{
+		ConnectionID: "cb",
+		PlayerID:     "ub",
+		ClientMsg:    "reaction-invalid",
+		Event: &ws.ReactionEvent{
+			BaseClientEvent: ws.BaseClientEvent{ClientMsgID: "reaction-invalid", Type: "reaction"},
+			Emoji:           "🚫",
+		},
+	}
+	invalid := waitType(t, outB, "error")
+	var invalidError ws.ErrorEvent
+	require.NoError(t, json.Unmarshal(invalid, &invalidError))
+	assert.Equal(t, "INVALID_REACTION", invalidError.Code)
+}
+
+func TestVoiceIsAvailableThroughEightPlayersAndBlockedAtNine(t *testing.T) {
+	eight := room.NewRoom("VOICE8", nil)
+	defer close(eight.CloseReq)
+	var firstID string
+	var secondOut chan []byte
+	for i := 1; i <= room.MaxVoiceParticipants; i++ {
+		id, _, out := join(t, eight, fmt.Sprintf("voice-%d", i), "P", fmt.Sprintf("conn-%d", i))
+		if i == 1 {
+			firstID = id
+		}
+		if i == 2 {
+			secondOut = out
+		}
+	}
+	drain(secondOut)
+	eight.Inbox <- room.RoomMessage{
+		ConnectionID: "conn-1",
+		PlayerID:     firstID,
+		ClientMsg:    "voice-eight",
+		Event: &ws.VoiceSignalEvent{
+			BaseClientEvent: ws.BaseClientEvent{ClientMsgID: "voice-eight", Type: "voice_signal"},
+			Kind:            "join",
+		},
+	}
+	allowed := waitType(t, secondOut, "voice_signal")
+	assert.Contains(t, string(allowed), `"kind":"join"`)
+
+	nine := room.NewRoom("VOICE9", nil)
+	defer close(nine.CloseReq)
+	var firstNineID string
+	var firstOut chan []byte
+	for i := 1; i <= room.MaxVoiceParticipants+1; i++ {
+		id, _, out := join(t, nine, fmt.Sprintf("nine-%d", i), "P", fmt.Sprintf("nine-conn-%d", i))
+		if i == 1 {
+			firstNineID, firstOut = id, out
+		}
+	}
+	drain(firstOut)
+	nine.Inbox <- room.RoomMessage{
+		ConnectionID: "nine-conn-1",
+		PlayerID:     firstNineID,
+		ClientMsg:    "voice-nine",
+		Event: &ws.VoiceSignalEvent{
+			BaseClientEvent: ws.BaseClientEvent{ClientMsgID: "voice-nine", Type: "voice_signal"},
+			Kind:            "join",
+		},
+	}
+	rejected := waitType(t, firstOut, "error")
+	var voiceError ws.ErrorEvent
+	require.NoError(t, json.Unmarshal(rejected, &voiceError))
+	assert.Equal(t, "VOICE_PLAYER_LIMIT", voiceError.Code)
 }

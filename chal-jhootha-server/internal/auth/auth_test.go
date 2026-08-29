@@ -38,6 +38,64 @@ func TestGuestAndLogin(t *testing.T) {
 	require.Equal(t, 200, rec3.Code)
 }
 
+func TestGuestSessionIsStatelessAndLogoutRevokesMemoryTicket(t *testing.T) {
+	svc := &auth.Service{}
+	guest := httptest.NewRecorder()
+	svc.HandleGuest(guest, httptest.NewRequest(http.MethodPost, "/api/auth/guest", bytes.NewBufferString(`{"name":"ZED"}`)))
+	require.Equal(t, http.StatusCreated, guest.Code)
+	cookies := guest.Result().Cookies()
+	require.Len(t, cookies, 1)
+
+	identity := httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
+	identity.AddCookie(cookies[0])
+	user, _, ok := svc.UserFromRequest(identity)
+	require.True(t, ok)
+	require.True(t, user.IsEphemeralGuest)
+
+	mint := httptest.NewRecorder()
+	mintReq := httptest.NewRequest(http.MethodPost, "/api/auth/ws-ticket", nil)
+	mintReq.AddCookie(cookies[0])
+	svc.HandleWsTicket(mint, mintReq)
+	require.Equal(t, http.StatusOK, mint.Code)
+	var ticket struct {
+		Ticket string `json:"ticket"`
+	}
+	require.NoError(t, json.Unmarshal(mint.Body.Bytes(), &ticket))
+	require.NotEmpty(t, ticket.Ticket)
+
+	logout := httptest.NewRecorder()
+	logoutReq := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	logoutReq.AddCookie(cookies[0])
+	svc.HandleLogout(logout, logoutReq)
+	require.Equal(t, http.StatusOK, logout.Code)
+
+	reusedTicket := httptest.NewRequest(http.MethodGet, "/ws?ticket="+ticket.Ticket, nil)
+	_, _, ok = svc.UserFromRequest(reusedTicket)
+	require.False(t, ok)
+}
+
+func TestWebSocketTicketCanUseSubprotocol(t *testing.T) {
+	svc := &auth.Service{}
+	guest := httptest.NewRecorder()
+	svc.HandleGuest(guest, httptest.NewRequest(http.MethodPost, "/api/auth/guest", bytes.NewBufferString(`{"name":"ZED"}`)))
+	cookie := guest.Result().Cookies()[0]
+
+	mint := httptest.NewRecorder()
+	mintReq := httptest.NewRequest(http.MethodPost, "/api/auth/ws-ticket", nil)
+	mintReq.AddCookie(cookie)
+	svc.HandleWsTicket(mint, mintReq)
+	var ticket struct {
+		Ticket string `json:"ticket"`
+	}
+	require.NoError(t, json.Unmarshal(mint.Body.Bytes(), &ticket))
+
+	wsRequest := httptest.NewRequest(http.MethodGet, "/ws", nil)
+	wsRequest.Header.Set("Sec-WebSocket-Protocol", "cj-v1, cj-auth-"+ticket.Ticket)
+	user, _, ok := svc.UserFromRequest(wsRequest)
+	require.True(t, ok)
+	require.True(t, user.IsEphemeralGuest)
+}
+
 func TestProfileEndpointsRejectGuestAccounts(t *testing.T) {
 	st := teststore.Open(t)
 	defer st.Close()

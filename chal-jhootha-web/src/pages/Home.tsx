@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import { ArrowRight, Plus, Shield, Users } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useSession } from '../lib/auth';
 import { useGameStore } from '../state/gameStore';
 import { disconnectSocket } from '../ws/socket';
@@ -69,12 +70,17 @@ export const Home: React.FC = () => {
 
       <main id="main-content" className="page-container grid items-start gap-6 pb-12 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,28rem)] lg:gap-12 lg:pt-4">
         {/* Left Hero Section */}
-        <section className="min-w-0 pt-2 lg:pt-6">
-          <div className="mb-3 inline-flex items-center gap-1.5 border-2 border-ink bg-evidence-red px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[2px_2px_0_var(--color-ink)]">
+        <motion.section
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          className="min-w-0 pt-2 lg:pt-6"
+        >
+          <div className="mb-3 inline-flex items-center gap-1.5 rounded-md border-2 border-ink bg-evidence-red px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[2px_2px_0_var(--color-ink)]">
             <span>OFFICIAL BLUFF PROTOCOL</span>
           </div>
 
-          <h1 className="font-display text-[clamp(2.5rem,9vw,5.75rem)] leading-[0.85] tracking-[-0.06em] text-ink">
+          <h1 className="font-display text-[clamp(2.5rem,8.5vw,5.5rem)] leading-[0.88] tracking-[-0.05em] text-ink">
             CHAL<br />JHOOTHA
           </h1>
 
@@ -82,20 +88,26 @@ export const Home: React.FC = () => {
             Call bluffs, disguise plays, and empty your hand before you get caught.
           </p>
 
-          <div className="mt-6 flex flex-wrap items-center gap-4 font-mono text-xs font-bold uppercase text-ink-muted">
-            <div className="flex items-center gap-2 border border-ink/20 bg-surface px-3 py-1.5 shadow-[2px_2px_0_var(--color-ink)]">
+          <div className="mt-6 flex flex-wrap items-center gap-3 font-mono text-xs font-bold uppercase text-ink-muted">
+            <div className="flex items-center gap-2 rounded-lg border border-ink/20 bg-surface px-3 py-1.5 shadow-[2px_2px_0_var(--color-ink)]">
               <Users size={15} className="text-evidence-red" strokeWidth={2.5} />
               <span>2–8 PLAYERS</span>
             </div>
-            <div className="flex items-center gap-2 border border-ink/20 bg-surface px-3 py-1.5 shadow-[2px_2px_0_var(--color-ink)]">
+            <div className="flex items-center gap-2 rounded-lg border border-ink/20 bg-surface px-3 py-1.5 shadow-[2px_2px_0_var(--color-ink)]">
               <Shield size={15} className="text-confirmed-green" strokeWidth={2.5} />
               <span>VOICE & P2P SYNC</span>
             </div>
           </div>
-        </section>
+        </motion.section>
 
         {/* Right Match Card */}
-        <section className="brutal-card w-full p-5 sm:p-7" aria-labelledby="match-hub-title">
+        <motion.section
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+          className="brutal-card w-full p-5 sm:p-7"
+          aria-labelledby="match-hub-title"
+        >
           <div className="mb-5 border-b-2 border-ink pb-3.5">
             <h2 id="match-hub-title" className="font-display text-2xl uppercase tracking-tight sm:text-3xl">
               Match Hub
@@ -105,7 +117,7 @@ export const Home: React.FC = () => {
 
           {/* Signed In Identity vs Guest Name */}
           {isRegistered ? (
-            <div className="mb-5 flex items-center justify-between border-2 border-ink bg-paper p-3 shadow-[2px_2px_0_var(--color-ink)]">
+            <div className="mb-5 flex items-center justify-between rounded-lg border-2 border-ink bg-paper p-3 shadow-[2px_2px_0_var(--color-ink)]">
               <div className="min-w-0">
                 <span className="block font-mono text-[10px] font-bold uppercase tracking-wider text-ink-muted">
                   PLAYING AS
@@ -148,11 +160,11 @@ export const Home: React.FC = () => {
             className="brutal-btn flex w-full items-center justify-center gap-2 bg-confirmed-green text-white transition-transform active:scale-[0.98]"
           >
             <Plus size={18} strokeWidth={2.5} />
-            <span>{isCreating ? 'Creating Room...' : 'Create New Room'}</span>
+            <span>{isCreating ? 'Creating Room...' : 'Create Room'}</span>
           </button>
 
           {createError || lastError ? (
-            <p role="alert" aria-live="assertive" className="mt-4 border-2 border-ink bg-evidence-red p-3 font-mono text-xs font-bold text-white">
+            <p role="alert" aria-live="assertive" className="mt-4 rounded-lg border-2 border-ink bg-evidence-red p-3 font-mono text-xs font-bold text-white">
               {createError || lastError}
             </p>
           ) : null}
@@ -191,7 +203,7 @@ export const Home: React.FC = () => {
               <ArrowRight size={16} strokeWidth={2.5} />
             </button>
           </form>
-        </section>
+        </motion.section>
       </main>
     </div>
   );

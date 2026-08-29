@@ -7,7 +7,7 @@ import { useGameStore } from '../state/gameStore';
 const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 
 export const ActionBar: React.FC<{ selectedCards: string[]; clearSelection: () => void }> = ({ selectedCards, clearSelection }) => {
-  const { gameState, playerId, playCards, challenge, skip, youAreController, yourRole, connectionStatus } = useGameStore();
+  const { gameState, playerId, playCards, challenge, skip, youAreController, yourRole, connectionStatus, pendingAction, lastError } = useGameStore();
   const [challengeConfirm, setChallengeConfirm] = useState(false);
   const [isSelectingRank, setIsSelectingRank] = useState(false);
   const reduceMotion = useReducedMotion();
@@ -21,6 +21,10 @@ export const ActionBar: React.FC<{ selectedCards: string[]; clearSelection: () =
   if (!gameState || gameState.phase !== 'playing') return null;
   if (!youAreController || yourRole === 'winner_spectator' || yourRole === 'abandoned') return null;
   if (connectionStatus !== 'CONNECTED') return <p className="border-2 border-ink bg-evidence-red px-3 py-2 text-center font-mono text-xs font-bold text-white">Waiting for a stable connection.</p>;
+
+  if (pendingAction) {
+    return <p aria-live="polite" className="border-2 border-ink bg-caution-yellow px-3 py-2 text-center font-mono text-xs font-bold uppercase tracking-[0.08em] text-ink">{pendingAction.type.replace('_', ' ')}…</p>;
+  }
 
   const isMyTurn = gameState.currentTurnPlayerId === playerId;
   const isOpener = gameState.roundOpenerId === playerId;
@@ -48,7 +52,9 @@ export const ActionBar: React.FC<{ selectedCards: string[]; clearSelection: () =
   }
 
   return (
-    <AnimatePresence mode="wait">
+    <>
+      {lastError ? <p role="alert" className="mb-2 border-2 border-ink bg-evidence-red px-3 py-2 text-center font-mono text-xs font-bold text-white">{lastError}</p> : null}
+      <AnimatePresence mode="wait">
       {isSelectingRank ? (
         <motion.div key="rank-picker" initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.18 }} className="border-3 border-ink bg-surface p-3 shadow-[4px_4px_0_var(--color-ink)]">
           <div className="mb-3 flex items-center justify-between gap-3"><div><p className="font-display text-lg uppercase">Choose a rank</p><p className="font-mono text-xs text-ink-muted">Your first play sets the claim.</p></div><button type="button" onClick={() => setIsSelectingRank(false)} className="icon-btn" aria-label="Cancel rank selection"><X size={19} strokeWidth={2.5} /></button></div>
@@ -63,6 +69,7 @@ export const ActionBar: React.FC<{ selectedCards: string[]; clearSelection: () =
           <button type="button" onClick={skip} className="brutal-btn flex min-w-0 items-center justify-center gap-1.5 bg-ink px-2 text-xs text-white sm:text-sm"><SkipForward size={17} strokeWidth={2.5} /><span>Skip</span></button>
         </motion.div>
       )}
-    </AnimatePresence>
+      </AnimatePresence>
+    </>
   );
 };

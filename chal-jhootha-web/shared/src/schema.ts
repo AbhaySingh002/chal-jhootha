@@ -71,6 +71,11 @@ export const VoiceSignalSchema = BaseClientEvent.extend({
   payload: z.any().optional(),
 });
 
+export const ReactionSchema = BaseClientEvent.extend({
+  type: z.literal('reaction'),
+  emoji: z.string().emoji(),
+});
+
 export const ClientEventSchema = z.discriminatedUnion('type', [
   JoinRoomSchema,
   CreateRoomSchema,
@@ -83,6 +88,7 @@ export const ClientEventSchema = z.discriminatedUnion('type', [
   SyncStateSchema,
   ResetToLobbySchema,
   VoiceSignalSchema,
+  ReactionSchema,
 ]);
 
 export type ClientEvent = z.infer<typeof ClientEventSchema>;
@@ -96,3 +102,4 @@ export type HeartbeatEvent = z.infer<typeof HeartbeatSchema>;
 export type SetConfigEvent = z.infer<typeof SetConfigSchema>;
 export type SyncStateEvent = z.infer<typeof SyncStateSchema>;
 export type ResetToLobbyEvent = z.infer<typeof ResetToLobbySchema>;
+export type ReactionInputEvent = z.infer<typeof ReactionSchema>;

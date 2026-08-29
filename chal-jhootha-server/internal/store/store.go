@@ -91,6 +91,10 @@ type User struct {
 	PasswordHash sql.NullString
 	DisplayName  string
 	IsRegistered bool
+	// IsEphemeralGuest is true only for a guest reconstructed from a signed
+	// browser session. It is deliberately never stored in the users table
+	// until that guest finishes a match or creates a registered account.
+	IsEphemeralGuest bool
 }
 
 func (s *Store) CreateUser(id, displayName string, email, passwordHash *string) error {
@@ -226,7 +230,8 @@ func (s *Store) DeleteWSTicketsForUser(userID string) error {
 func (s *Store) SaveRoom(code, snapshot string, seq int) error {
 	_, err := s.db.Exec(
 		`INSERT INTO rooms (code, snapshot, seq, updated_at) VALUES ($1, $2::jsonb, $3, NOW())
-		 ON CONFLICT(code) DO UPDATE SET snapshot = EXCLUDED.snapshot, seq = EXCLUDED.seq, updated_at = NOW()`,
+		 ON CONFLICT(code) DO UPDATE SET snapshot = EXCLUDED.snapshot, seq = EXCLUDED.seq, updated_at = NOW()
+		 WHERE rooms.seq <= EXCLUDED.seq`,
 		code, snapshot, seq,
 	)
 	return err
@@ -328,8 +333,9 @@ type FriendshipView struct {
 }
 
 type MatchParticipant struct {
-	UserID   string
-	IsWinner bool
+	UserID      string
+	DisplayName string
+	IsWinner    bool
 }
 
 func (s *Store) CreateProfile(userID, handle string) (*Profile, error) {
@@ -597,6 +603,11 @@ func (s *Store) RecordCompletedMatch(matchID, roomCode string, participants []Ma
 		return false, nil
 	}
 	for _, participant := range participants {
+		// Stateless guests become durable only when a match is worth retaining.
+		// Existing registered users are unaffected by this idempotent insert.
+		if _, err = tx.Exec(`INSERT INTO users (id, display_name) VALUES ($1, COALESCE(NULLIF($2, ''), 'GUEST')) ON CONFLICT DO NOTHING`, participant.UserID, participant.DisplayName); err != nil {
+			return false, err
+		}
 		var registered bool
 		if err = tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM profiles WHERE user_id = $1)`, participant.UserID).Scan(&registered); err != nil {
 			return false, err

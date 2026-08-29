@@ -9,6 +9,28 @@ let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 let messageQueue: ClientEvent[] = [];
 let reconnectAttempts = 0;
 let connectLock: Promise<void> | null = null;
+const reliableActionTypes = new Set(['start_game', 'reset_to_lobby', 'set_config', 'play_cards', 'challenge', 'skip']);
+const pendingReliableEvents = new Map<string, ClientEvent>();
+
+function isReliableAction(event: ClientEvent) {
+  return reliableActionTypes.has(event.type);
+}
+
+function queueReliableEventsForRetry() {
+  for (const event of pendingReliableEvents.values()) {
+    if (!messageQueue.some((queued) => queued.clientMsgId === event.clientMsgId)) {
+      messageQueue.push(event);
+    }
+  }
+}
+
+function resolveReliableEvent(event: ServerEvent) {
+  if (event.type === 'action_accepted' || event.type === 'action_rejected') {
+    pendingReliableEvents.delete(event.clientMsgId);
+  } else if (event.type === 'error' && event.clientMsgId) {
+    pendingReliableEvents.delete(event.clientMsgId);
+  }
+}
 
 function wsUrl() {
   if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL as string;
@@ -19,13 +41,6 @@ function wsUrl() {
   }
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   return `${proto}://${location.host}/ws`;
-}
-
-function withWsTicket(baseUrl: string, ticket: string) {
-  const parsed = new URL(baseUrl, typeof location !== 'undefined' ? location.href : 'http://localhost');
-  parsed.searchParams.delete('ticket');
-  parsed.searchParams.set('ticket', ticket);
-  return parsed.toString();
 }
 
 export async function connectSocket(url = wsUrl()) {
@@ -51,7 +66,10 @@ export async function connectSocket(url = wsUrl()) {
       return;
     }
 
-    socket = new WebSocket(withWsTicket(url, ticket));
+    // Keep the one-time ticket out of URLs so reverse-proxy and browser URL
+    // logs cannot retain it. `cj-v1` is the negotiated application protocol;
+    // the second value is read only during the handshake.
+    socket = new WebSocket(url, ['cj-v1', `cj-auth-${ticket}`]);
 
     socket.onopen = () => {
       reconnectAttempts = 0;
@@ -63,7 +81,8 @@ export async function connectSocket(url = wsUrl()) {
 
       const joinMsgIndex = messageQueue.map(m => m.type).lastIndexOf('join_room');
       if (joinMsgIndex !== -1) {
-        messageQueue = messageQueue.filter((m, i) => m.type !== 'join_room' || i === joinMsgIndex);
+        const joinMessage = messageQueue[joinMsgIndex];
+        messageQueue = [joinMessage, ...messageQueue.filter((m, i) => m.type !== 'join_room' && i !== joinMsgIndex)];
       }
 
       while (messageQueue.length > 0) {
@@ -83,6 +102,7 @@ export async function connectSocket(url = wsUrl()) {
       try {
         const data = JSON.parse(event.data) as ServerEvent;
         useGameStore.getState().onMessage(data);
+        resolveReliableEvent(data);
       } catch (err) {
         console.error('Failed to parse WS message:', err);
       }
@@ -90,6 +110,7 @@ export async function connectSocket(url = wsUrl()) {
 
     socket.onclose = () => {
       useGameStore.getState().onDisconnected();
+      queueReliableEventsForRetry();
       socket = null;
       if (heartbeatInterval) {
         clearInterval(heartbeatInterval);
@@ -127,6 +148,9 @@ export async function connectSocket(url = wsUrl()) {
 }
 
 export function sendEvent(event: ClientEvent) {
+  if (isReliableAction(event)) {
+    pendingReliableEvents.set(event.clientMsgId, event);
+  }
   if (socket?.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(event));
   } else {

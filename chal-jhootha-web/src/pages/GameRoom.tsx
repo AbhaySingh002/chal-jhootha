@@ -1,10 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useReducedMotion } from 'framer-motion';
+import type { Card as PlayingCard, GameState } from 'shared';
 import { LogOut, Mic, MicOff, Radio, RotateCcw, UserPlus, Users, Volume2, VolumeX } from 'lucide-react';
 import { useLocation, useParams } from 'wouter';
 import { useSession } from '../lib/auth';
 import { createFriendRequest } from '../lib/profile';
 import { ActionBar } from '../components/ActionBar';
 import { BrutalistStamp } from '../components/BrutalistStamp';
+import { CardFlightLayer, type CardFlight, type FlightPoint } from '../components/CardFlightLayer';
 import { Hand } from '../components/Hand';
 import { Lobby } from '../components/Lobby';
 import { PlayerRosterSheet } from '../components/PlayerRosterSheet';
@@ -13,25 +16,136 @@ import { Stack } from '../components/Stack';
 import { useGameStore } from '../state/gameStore';
 import { RoomVoice } from '../voice/voice';
 
+interface AnimationSnapshot {
+  phase: GameState['phase'];
+  stackCount: number;
+  hand: PlayingCard[];
+}
+
+interface PendingPickup {
+	playerId: string;
+	count: number;
+}
+
+interface TableReaction {
+  id: string;
+  playerName: string;
+  emoji: string;
+}
+
+const REACTIONS = ['🔥', '😂', '😮', '👏', '🃏', '👀', '😈', '💀'];
+
+const flightPointFor = (rect: DOMRect, scale = 1): FlightPoint => {
+  const isMobile = window.innerWidth < 640;
+  const cardWidth = isMobile ? 72 : 96;
+  const cardHeight = isMobile ? 112 : 144;
+  return {
+    x: rect.left + rect.width / 2 - cardWidth / 2,
+    y: rect.top + rect.height / 2 - cardHeight / 2,
+    scale,
+  };
+};
+
+interface ActiveVoiceControlsProps {
+  playerId: string | null;
+  sendVoice: (kind: string, payload?: unknown, targetUserId?: string) => void;
+  onVoiceError: (message: string) => void;
+}
+
+const ActiveVoiceControls: React.FC<ActiveVoiceControlsProps> = ({ playerId, sendVoice, onVoiceError }) => {
+  const [voiceOn, setVoiceOn] = useState(false);
+  const [micMuted, setMicMuted] = useState(true);
+  const [speakerMuted, setSpeakerMuted] = useState(false);
+  const voiceRef = useRef<RoomVoice | null>(null);
+
+  useEffect(() => {
+    if (!playerId) return;
+    const voice = new RoomVoice(playerId, sendVoice);
+    voiceRef.current = voice;
+    return () => {
+      voice.dispose();
+      if (voiceRef.current === voice) voiceRef.current = null;
+    };
+  }, [playerId, sendVoice]);
+
+  const enableVoice = async () => {
+    const voice = voiceRef.current;
+    if (!voice) {
+      onVoiceError('Voice is not ready yet. Try again in a moment.');
+      return;
+    }
+    onVoiceError('');
+    try {
+      await voice.join();
+      voice.setMuted(false);
+      voice.setSpeakerMuted(speakerMuted);
+      setVoiceOn(true);
+      setMicMuted(false);
+    } catch {
+      setVoiceOn(false);
+      setMicMuted(true);
+      onVoiceError('Microphone access was blocked. Allow microphone access in your browser settings, then try again.');
+    }
+  };
+
+  const toggleMic = () => {
+    if (!voiceOn) {
+      void enableVoice();
+      return;
+    }
+    const nextMuted = !micMuted;
+    setMicMuted(nextMuted);
+    voiceRef.current?.setMuted(nextMuted);
+  };
+
+  const toggleSpeaker = () => {
+    if (!voiceOn) {
+      void enableVoice();
+      return;
+    }
+    const nextMuted = !speakerMuted;
+    setSpeakerMuted(nextMuted);
+    voiceRef.current?.setSpeakerMuted(nextMuted);
+  };
+
+  return (
+    <>
+      <button type="button" onClick={toggleMic} className={`icon-btn ${voiceOn && !micMuted ? 'bg-confirmed-green text-white' : 'bg-surface text-ink-muted'}`} aria-label={!voiceOn ? 'Join voice chat' : micMuted ? 'Unmute microphone' : 'Mute microphone'} title={!voiceOn ? 'Join voice chat' : micMuted ? 'Unmute microphone' : 'Mute microphone'}>{!voiceOn || micMuted ? <MicOff size={19} strokeWidth={2.5} /> : <Mic size={19} strokeWidth={2.5} />}</button>
+      <button type="button" onClick={toggleSpeaker} className={`icon-btn ${voiceOn && !speakerMuted ? 'bg-caution-yellow text-ink' : 'bg-surface text-ink-muted'}`} aria-label={speakerMuted ? 'Unmute speakers' : 'Mute speakers'} title={speakerMuted ? 'Unmute speakers' : 'Mute speakers'}>{speakerMuted || !voiceOn ? <VolumeX size={19} strokeWidth={2.5} /> : <Volume2 size={19} strokeWidth={2.5} />}</button>
+    </>
+  );
+};
+
+const DisabledVoiceControls: React.FC = () => (
+  <>
+    <button type="button" disabled className="icon-btn bg-surface text-ink-muted disabled:cursor-not-allowed disabled:opacity-45" aria-label="Voice chat unavailable for rooms over eight players" title="Voice chat is disabled above eight players"><MicOff size={19} strokeWidth={2.5} /></button>
+    <button type="button" disabled className="icon-btn bg-surface text-ink-muted disabled:cursor-not-allowed disabled:opacity-45" aria-label="Voice chat unavailable for rooms over eight players" title="Voice chat is disabled above eight players"><VolumeX size={19} strokeWidth={2.5} /></button>
+  </>
+);
+
 export const GameRoom: React.FC = () => {
   const { code } = useParams<{ code: string }>();
   const [, setLocation] = useLocation();
   const {
     gameState, isConnected, connectionStatus, playerId, roomCode, joinRoom, resetSession, resetToLobby,
-    lastError, lastChallengeResult, lastBurned, sendVoice, yourRole, handsCount,
+    lastError, lastChallengeResult, lastBurned, sendVoice, sendReaction, yourRole, handsCount, myHand,
   } = useGameStore();
   const { data: session } = useSession();
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
   const [pendingName, setPendingName] = useState('');
   const [joinedName, setJoinedName] = useState<string | null>(null);
   const [connectionTimeout, setConnectionTimeout] = useState(false);
-  const [voiceOn, setVoiceOn] = useState(false);
-  const [micMuted, setMicMuted] = useState(true);
-  const [speakerMuted, setSpeakerMuted] = useState(false);
   const [voiceError, setVoiceError] = useState('');
+  const [reactions, setReactions] = useState<TableReaction[]>([]);
   const [rosterOpen, setRosterOpen] = useState(false);
+  const [flights, setFlights] = useState<CardFlight[]>([]);
+  const [concealedCardIds, setConcealedCardIds] = useState<string[]>([]);
   const hasAttemptedJoin = useRef(false);
-  const voiceRef = useRef<RoomVoice | null>(null);
+  const animationSnapshotRef = useRef<AnimationSnapshot | null>(null);
+  const pendingPickupRef = useRef<PendingPickup | null>(null);
+  const processedChallengeSeqsRef = useRef(new Set<number>());
+  const flightSequenceRef = useRef(0);
+  const reduceMotion = useReducedMotion();
 
   const storedToken = typeof window !== 'undefined' ? sessionStorage.getItem('rejoinToken') : null;
   const storedRoom = typeof window !== 'undefined' ? sessionStorage.getItem('roomCode') : null;
@@ -40,14 +154,15 @@ export const GameRoom: React.FC = () => {
   const isReconnecting = connectionStatus === 'RECONNECTING' || connectionStatus === 'OFFLINE';
 
   useEffect(() => {
-    if (!playerId) return;
-    const voice = new RoomVoice(playerId, sendVoice);
-    voiceRef.current = voice;
-    return () => {
-      voice.leave();
-      if (voiceRef.current === voice) voiceRef.current = null;
+    const onReaction = (event: Event) => {
+      const reaction = (event as CustomEvent<TableReaction>).detail;
+      if (!reaction?.id || !reaction.emoji) return;
+      setReactions((current) => current.some((item) => item.id === reaction.id) ? current : [...current, reaction]);
+      window.setTimeout(() => setReactions((current) => current.filter((item) => item.id !== reaction.id)), 1800);
     };
-  }, [playerId, sendVoice]);
+    window.addEventListener('cj-reaction', onReaction as EventListener);
+    return () => window.removeEventListener('cj-reaction', onReaction as EventListener);
+  }, []);
 
   useEffect(() => {
     if (!isConnected || gameState) return;
@@ -75,10 +190,112 @@ export const GameRoom: React.FC = () => {
     }
   }, [code, roomCode, isConnected, gameState, session?.user?.name, joinRoom, joinedName]);
 
-  useEffect(() => {
-    if (!gameState) return;
-    setSelectedCards((cards) => cards.filter((id) => gameState.phase === 'playing' && useGameStore.getState().myHand.some((card) => card.id === id)));
-  }, [gameState?.phase, gameState?.roomCode]);
+  const finishFlight = useCallback((flight: CardFlight) => {
+    setFlights((current) => current.filter((candidate) => candidate.id !== flight.id));
+    if (flight.revealCardId) {
+      setConcealedCardIds((current) => current.filter((cardId) => cardId !== flight.revealCardId));
+    }
+  }, []);
+
+  const queueFlights = useCallback((kind: 'deal' | 'pickup', targetPlayerId: string, count: number, revealCardIds: string[]) => {
+    if (count <= 0) return;
+
+    window.requestAnimationFrame(() => {
+      const sourceElement = document.querySelector<HTMLElement>('[data-card-stack-anchor]');
+      const handAnchor = document.querySelector<HTMLElement>('[data-hand-anchor]');
+      const seat = Array.from(document.querySelectorAll<HTMLElement>('[data-player-seat-id]'))
+        .find((element) => element.dataset.playerSeatId === targetPlayerId);
+      const extraPlayersAnchor = document.querySelector<HTMLElement>('[data-extra-players-anchor]');
+      const playerAnchor = targetPlayerId === playerId ? handAnchor : seat ?? extraPlayersAnchor;
+      const sourceRect = sourceElement?.getBoundingClientRect();
+      const fallbackTargetRect = playerAnchor?.getBoundingClientRect();
+
+      if (!sourceRect || !fallbackTargetRect) {
+        if (revealCardIds.length > 0) {
+          setConcealedCardIds((current) => current.filter((cardId) => !revealCardIds.includes(cardId)));
+        }
+        return;
+      }
+
+      const source = flightPointFor(sourceRect, 0.92);
+      const flightGroup = Array.from({ length: count }, (_, index) => {
+        const revealCardId = revealCardIds[index];
+        const handCard = revealCardId
+          ? Array.from(document.querySelectorAll<HTMLElement>('[data-hand-card-id]'))
+              .find((element) => element.dataset.handCardId === revealCardId)
+          : null;
+        const targetRect = handCard?.getBoundingClientRect() ?? fallbackTargetRect;
+        const isHandDestination = targetPlayerId === playerId;
+        const targetScale = isHandDestination
+          ? 1
+          : Math.max(0.34, Math.min(0.58, targetRect.width / (window.innerWidth < 640 ? 72 : 96)));
+
+        return {
+          id: `${kind}-${flightSequenceRef.current}-${index}`,
+          source,
+          target: flightPointFor(targetRect, targetScale),
+          delay: index * 0.04,
+          revealCardId,
+        } satisfies CardFlight;
+      });
+
+      flightSequenceRef.current += 1;
+      setFlights((current) => [...current, ...flightGroup]);
+    });
+  }, [playerId]);
+
+  useLayoutEffect(() => {
+    if (!gameState) {
+      animationSnapshotRef.current = null;
+      pendingPickupRef.current = null;
+      return;
+    }
+
+    const previous = animationSnapshotRef.current;
+    const currentSnapshot: AnimationSnapshot = {
+      phase: gameState.phase,
+      stackCount: gameState.stackCount,
+      hand: myHand,
+    };
+
+    const startsRound = previous?.phase === 'lobby' && gameState.phase === 'playing';
+    if (startsRound && !reduceMotion) {
+      gameState.players.forEach((player) => {
+        const revealCardIds = player.id === playerId ? myHand.map((card) => card.id) : [];
+        const cardCount = player.id === playerId ? revealCardIds.length : handsCount[player.id] ?? player.handCount;
+        if (revealCardIds.length > 0) {
+          setConcealedCardIds((current) => Array.from(new Set([...current, ...revealCardIds])));
+        }
+        queueFlights('deal', player.id, cardCount, revealCardIds);
+      });
+    }
+
+    if (lastChallengeResult && !processedChallengeSeqsRef.current.has(lastChallengeResult.seq)) {
+      processedChallengeSeqsRef.current.add(lastChallengeResult.seq);
+      pendingPickupRef.current = {
+        playerId: lastChallengeResult.pickedUpBy,
+        count: previous?.stackCount ?? gameState.stackCount,
+      };
+    }
+
+    const pendingPickup = pendingPickupRef.current;
+    if (pendingPickup && gameState.stackCount === 0) {
+      const priorHandIds = new Set(previous?.hand.map((card) => card.id) ?? []);
+      const revealCardIds = pendingPickup.playerId === playerId
+        ? myHand.filter((card) => !priorHandIds.has(card.id)).map((card) => card.id)
+        : [];
+
+      if (!reduceMotion && pendingPickup.count > 0) {
+        if (revealCardIds.length > 0) {
+          setConcealedCardIds((current) => Array.from(new Set([...current, ...revealCardIds])));
+        }
+        queueFlights('pickup', pendingPickup.playerId, pendingPickup.count, revealCardIds);
+      }
+      pendingPickupRef.current = null;
+    }
+
+    animationSnapshotRef.current = currentSnapshot;
+  }, [gameState, handsCount, lastChallengeResult, myHand, playerId, queueFlights, reduceMotion]);
 
   const handleManualJoin = (event: React.FormEvent) => {
     event.preventDefault();
@@ -86,52 +303,27 @@ export const GameRoom: React.FC = () => {
     setJoinedName(pendingName.trim().toUpperCase());
   };
 
-  const toggleSelect = (id: string) => setSelectedCards((cards) => cards.includes(id) ? cards.filter((card) => card !== id) : [...cards, id]);
+  const currentSelectedCards = gameState?.phase === 'playing'
+    ? selectedCards.filter((id) => myHand.some((card) => card.id === id))
+    : [];
 
-  const enableVoice = async () => {
-    const voice = voiceRef.current;
-    if (!voice) {
-      setVoiceError('Voice is not ready yet. Try again in a moment.');
-      return;
-    }
-    setVoiceError('');
-    try {
-      await voice.join();
-      voice.setMuted(false);
-      voice.setSpeakerMuted(speakerMuted);
-      setVoiceOn(true);
-      setMicMuted(false);
-    } catch {
-      setVoiceOn(false);
-      setMicMuted(true);
-      setVoiceError('Microphone access was blocked. Allow microphone access in your browser settings, then try again.');
-    }
+  const toggleSelect = (id: string) => {
+    if (gameState?.phase !== 'playing' || !myHand.some((card) => card.id === id)) return;
+    setSelectedCards((cards) => {
+      const current = cards.filter((cardId) => myHand.some((card) => card.id === cardId));
+      return current.includes(id) ? current.filter((cardId) => cardId !== id) : [...current, id];
+    });
   };
 
-  const toggleMic = () => {
-    if (!voiceOn) {
-      void enableVoice();
-      return;
-    }
-    const nextMuted = !micMuted;
-    setMicMuted(nextMuted);
-    voiceRef.current?.setMuted(nextMuted);
-  };
-
-  const toggleSpeaker = () => {
-    if (!voiceOn) {
-      void enableVoice();
-      return;
-    }
-    const nextMuted = !speakerMuted;
-    setSpeakerMuted(nextMuted);
-    voiceRef.current?.setSpeakerMuted(nextMuted);
-  };
+  const voiceUnavailable = !!gameState && gameState.players.length > 8;
 
   const handleLeaveGame = () => {
-    voiceRef.current?.leave();
     resetSession();
     setLocation('/');
+  };
+
+  const sendTableReaction = (emoji: string) => {
+    if (isConnected) sendReaction(emoji);
   };
 
   /* ── Pre-game states ── */
@@ -207,9 +399,17 @@ export const GameRoom: React.FC = () => {
 
   return (
     <div className="game-shell">
+      <CardFlightLayer flights={flights} onFlightComplete={finishFlight} />
       <BrutalistStamp show={!!lastChallengeResult} text={lastChallengeResult?.wasBluff ? 'LIAR' : 'TRUTH'} color={lastChallengeResult?.wasBluff ? 'red' : 'green'} />
       <BrutalistStamp show={lastBurned} text="BURNED" color="black" />
       <p aria-live="polite" className="sr-only">{actionDescription}</p>
+      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 top-[32%] z-40 mx-auto h-36 max-w-xl" aria-label="Table reactions">
+        {reactions.map((reaction, index) => (
+          <div key={reaction.id} className="table-reaction" style={{ left: `${18 + ((index * 19) % 62)}%`, animationDelay: `${(index % 3) * 45}ms` }}>
+            <span>{reaction.emoji}</span><small>{reaction.playerName}</small>
+          </div>
+        ))}
+      </div>
 
       {/* ── Sticky top bar ── */}
       <header className="game-topbar">
@@ -223,45 +423,57 @@ export const GameRoom: React.FC = () => {
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2">
           <button type="button" onClick={() => setRosterOpen(true)} className="icon-btn" aria-label="Show all players" title="Show all players"><Users size={19} strokeWidth={2.5} /></button>
-          <button type="button" onClick={toggleMic} className={`icon-btn ${voiceOn && !micMuted ? 'bg-confirmed-green text-white' : 'bg-surface text-ink-muted'}`} aria-label={!voiceOn ? 'Join voice chat' : micMuted ? 'Unmute microphone' : 'Mute microphone'} title={!voiceOn ? 'Join voice chat' : micMuted ? 'Unmute microphone' : 'Mute microphone'}>{!voiceOn || micMuted ? <MicOff size={19} strokeWidth={2.5} /> : <Mic size={19} strokeWidth={2.5} />}</button>
-          <button type="button" onClick={toggleSpeaker} className={`icon-btn ${voiceOn && !speakerMuted ? 'bg-caution-yellow text-ink' : 'bg-surface text-ink-muted'}`} aria-label={speakerMuted ? 'Unmute speakers' : 'Mute speakers'} title={speakerMuted ? 'Unmute speakers' : 'Mute speakers'}>{speakerMuted || !voiceOn ? <VolumeX size={19} strokeWidth={2.5} /> : <Volume2 size={19} strokeWidth={2.5} />}</button>
+          {voiceUnavailable ? <DisabledVoiceControls /> : <ActiveVoiceControls key={playerId ?? 'pending'} playerId={playerId} sendVoice={sendVoice} onVoiceError={setVoiceError} />}
         </div>
       </header>
 
       {/* ── Status banners ── */}
       {(isReconnecting || connectionStatus === 'SYNCING') ? <p role="status" className="border-b-2 border-ink bg-evidence-red px-3 py-2 text-center font-mono text-xs font-bold uppercase text-white">{connectionStatus === 'SYNCING' ? 'Syncing room state' : 'Connection lost. Reconnecting.'}</p> : null}
       {yourRole === 'winner_spectator' ? <p className="border-b-2 border-ink bg-confirmed-green px-3 py-2 text-center font-mono text-xs font-bold uppercase text-white">You finished this match. Spectator mode is on.</p> : null}
+      {voiceUnavailable ? <p role="status" className="border-b-2 border-ink bg-surface-muted px-3 py-2 text-center font-mono text-xs font-bold uppercase text-ink-muted">Voice chat is disabled for rooms with more than 8 players.</p> : null}
 
-      {/* ── Flexible table area ── */}
-      <main className="table-area">
-        <section
-          className="relative w-full border-[3px] border-ink bg-surface-muted shadow-[5px_5px_0_var(--color-ink)]"
-          style={{ maxWidth: 'min(100%, 28rem)', height: 'clamp(10rem, 28vw, 13rem)' }}
-          aria-label="Game table"
-        >
-          <div className="absolute inset-x-[18%] bottom-5 top-12 border-2 border-ink bg-paper" />
-          {tableOpponents.map((player, index) => <PlayerSeat key={player.id} player={player} position={index} total={tableOpponents.length} />)}
-          {additionalPlayers > 0 ? <button type="button" onClick={() => setRosterOpen(true)} className="absolute bottom-3 left-1/2 -translate-x-1/2 border-2 border-ink bg-caution-yellow px-2 py-1 font-mono text-xs font-bold shadow-[2px_2px_0_var(--color-ink)]">+{additionalPlayers} more players</button> : null}
-        </section>
+      {/* ── Open table play area ── */}
+      <main className="table-area relative flex-1 w-full flex flex-col items-center justify-center min-h-[17rem] sm:min-h-[22rem] px-2 py-4 overflow-hidden select-none">
+        <div className="relative w-full max-w-2xl h-[17rem] sm:h-[20rem] md:h-[22rem] flex items-center justify-center">
+          {/* Centered played-card pile */}
+          <div className="z-10 flex flex-col items-center">
+            <Stack />
+          </div>
 
-        <div className="mt-8 flex flex-col items-center sm:mt-10">
-          <Stack />
-          {gameState.lastAction ? (
-            <p className="mt-5 max-w-xs border-2 border-ink bg-surface px-3 py-2 text-center font-mono text-xs font-bold leading-5">
-              <span className="text-evidence-red">{gameState.players.find((player) => player.id === gameState.lastAction?.playerId)?.name}</span>{' '}
-              {gameState.lastAction.type === 'add' ? `played ${gameState.lastAction.details?.count || 0} cards` : gameState.lastAction.type === 'challenge' ? 'called bluff' : 'skipped'}
-            </p>
+          {/* Player seats arranged around the central stack */}
+          {tableOpponents.map((player, index) => (
+            <PlayerSeat key={player.id} player={player} position={index} total={tableOpponents.length} />
+          ))}
+
+          {additionalPlayers > 0 ? (
+            <button
+              type="button"
+              data-extra-players-anchor
+              onClick={() => setRosterOpen(true)}
+              className="absolute bottom-2 right-2 border-2 border-ink bg-caution-yellow px-2 py-1 font-mono text-xs font-bold shadow-[2px_2px_0_var(--color-ink)] transition-transform active:translate-x-0.5 active:translate-y-0.5"
+            >
+              +{additionalPlayers} more
+            </button>
           ) : null}
         </div>
-        {voiceError ? <p role="alert" className="mt-5 max-w-lg border-2 border-ink bg-evidence-red p-3 text-center font-mono text-xs font-bold leading-5 text-white">{voiceError}</p> : null}
+
+        {voiceError && !voiceUnavailable ? (
+          <p role="alert" className="mt-2 max-w-lg border-2 border-ink bg-evidence-red p-2.5 text-center font-mono text-xs font-bold leading-5 text-white">
+            {voiceError}
+          </p>
+        ) : null}
+
+        <div className="mt-3 flex max-w-full flex-wrap items-center justify-center gap-1.5" role="group" aria-label="Send a table reaction">
+          {REACTIONS.map((emoji) => <button key={emoji} type="button" onClick={() => sendTableReaction(emoji)} className="reaction-button" aria-label={`Send ${emoji} reaction`}>{emoji}</button>)}
+        </div>
       </main>
 
       {/* ── Bottom action/hand region ── */}
       <div className="bottom-bar">
         <div className="mx-auto w-full max-w-2xl">
-          <ActionBar selectedCards={selectedCards} clearSelection={() => setSelectedCards([])} />
+          <ActionBar selectedCards={currentSelectedCards} clearSelection={() => setSelectedCards([])} />
         </div>
-        <Hand selectedCards={selectedCards} onSelect={toggleSelect} />
+        <Hand selectedCards={currentSelectedCards} onSelect={toggleSelect} concealedCardIds={concealedCardIds} />
       </div>
 
       <PlayerRosterSheet open={rosterOpen} onClose={() => setRosterOpen(false)} players={gameState.players} playerId={playerId} hostId={gameState.hostId} handsCount={handsCount} />

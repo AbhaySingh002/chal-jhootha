@@ -14,6 +14,7 @@ import (
 
 	"chal-jhootha-server/internal/auth"
 	"chal-jhootha-server/internal/logger"
+	"chal-jhootha-server/internal/metrics"
 	"chal-jhootha-server/internal/room"
 	"chal-jhootha-server/internal/store"
 	"chal-jhootha-server/internal/transport"
@@ -35,10 +36,14 @@ func main() {
 	}
 	defer st.Close()
 
+	runtimeCtx, stopRuntime := context.WithCancel(context.Background())
+	defer stopRuntime()
+
 	authSvc := &auth.Service{Store: st}
 	rm := room.NewManager(st)
 	rm.Restore()
-	rm.StartJanitor(context.Background())
+	rm.StartPersistenceWorker(runtimeCtx)
+	rm.StartJanitor(runtimeCtx)
 	origins := auth.NewOriginPolicy("")
 	logger.Info("BOOT", "Server store ready", "database", "postgres")
 
@@ -59,6 +64,9 @@ func main() {
 	}
 	r.Get("/api/health", health)
 	r.Get("/healthz", health)
+	r.Get("/api/metrics", func(w http.ResponseWriter, r *http.Request) {
+		metrics.Handler().ServeHTTP(w, r)
+	})
 
 	r.Post("/api/auth/register", authSvc.HandleRegister)
 	r.Post("/api/auth/login", authSvc.HandleLogin)
@@ -66,6 +74,7 @@ func main() {
 	r.Post("/api/auth/logout", authSvc.HandleLogout)
 	r.Post("/api/auth/ws-ticket", authSvc.HandleWsTicket)
 	r.Get("/api/auth/session", authSvc.HandleSession)
+	r.Get("/api/voice/turn", authSvc.HandleTurnCredentials)
 	r.Get("/api/profile/me", authSvc.HandleMyProfile)
 	r.Post("/api/profile/me", authSvc.HandleCreateProfile)
 	r.Patch("/api/profile/me", authSvc.HandleUpdateProfile)
@@ -100,5 +109,12 @@ func main() {
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+	stopRuntime()
+	if err := rm.WaitForPersistenceWorker(ctx); err != nil {
+		logger.Error("PERSIST", "Persistence worker did not stop cleanly", "error", err)
+	}
+	if err := rm.FlushPersistence(ctx); err != nil {
+		logger.Error("PERSIST", "Graceful persistence flush timed out", "error", err)
 	}
 }

@@ -142,6 +142,11 @@ type VoiceSignalEvent struct {
 	Payload      any    `json:"payload,omitempty"`
 }
 
+type ReactionEvent struct {
+	BaseClientEvent
+	Emoji string `json:"emoji" validate:"required"`
+}
+
 type ResetToLobbyEvent struct {
 	BaseClientEvent
 }
@@ -215,6 +220,21 @@ type AckEvent struct {
 	RejoinToken *string `json:"rejoinToken,omitempty"`
 }
 
+// ActionAcceptedEvent confirms that the room actor applied a gameplay command.
+// Join acknowledgements remain `ack` for wire compatibility.
+type ActionAcceptedEvent struct {
+	Type        string `json:"type"`
+	ClientMsgID string `json:"clientMsgId"`
+	AppliedSeq  int    `json:"appliedSeq"`
+}
+
+type ActionRejectedEvent struct {
+	Type        string `json:"type"`
+	ClientMsgID string `json:"clientMsgId"`
+	Code        string `json:"code"`
+	Message     string `json:"message"`
+}
+
 type ErrorEvent struct {
 	Type        string  `json:"type"`
 	ClientMsgID *string `json:"clientMsgId,omitempty"`
@@ -252,4 +272,12 @@ type VoiceSignalBroadcast struct {
 	TargetUserID string `json:"targetUserId,omitempty"`
 	Kind         string `json:"kind"`
 	Payload      any    `json:"payload,omitempty"`
+}
+
+type ReactionBroadcast struct {
+	Type        string `json:"type"`
+	ClientMsgID string `json:"clientMsgId"`
+	PlayerID    string `json:"playerId"`
+	PlayerName  string `json:"playerName"`
+	Emoji       string `json:"emoji"`
 }

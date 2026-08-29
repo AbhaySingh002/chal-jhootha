@@ -22,6 +22,7 @@ services:
       DATABASE_URL: postgres://chal_jhootha:chal_jhootha_dev@postgres:5432/chal_jhootha?sslmode=disable
       FRONTEND_ORIGINS: http://localhost:5173
       ROOM_IDLE_TTL: 24h
+      GUEST_SESSION_SECRET: local-development-only-change-me
       LOG_FORMAT: json
       LOG_LEVEL: info
     ports:

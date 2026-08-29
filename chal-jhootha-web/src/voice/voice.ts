@@ -1,4 +1,6 @@
-const STUN = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+import { fetchVoiceIceServers, type IceServer } from '../lib/auth';
+
+const STUN: RTCConfiguration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
 type VoiceSignal = {
   fromUserId: string;
@@ -15,6 +17,7 @@ export class RoomVoice {
   private remoteAudio = new Map<string, HTMLAudioElement>();
   private send: (kind: string, payload?: unknown, target?: string) => void;
   private selfId: string;
+  private rtcConfig: RTCConfiguration = STUN;
 
   constructor(selfId: string, send: (kind: string, payload?: unknown, target?: string) => void) {
     this.selfId = selfId;
@@ -24,19 +27,28 @@ export class RoomVoice {
 
   async join() {
     if (this.stream) return;
+    try {
+      this.rtcConfig = { iceServers: await fetchVoiceIceServers() as IceServer[] };
+    } catch {
+      this.rtcConfig = STUN;
+    }
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     this.stream.getAudioTracks().forEach((t) => { t.enabled = !this.muted; });
     this.send('join');
   }
 
   leave() {
-    this.send('leave');
+    if (this.stream) this.send('leave');
     this.peers.forEach((pc) => pc.close());
     this.peers.clear();
     this.remoteAudio.forEach((audio) => audio.remove());
     this.remoteAudio.clear();
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
+  }
+
+  dispose() {
+    this.leave();
     window.removeEventListener('cj-voice', this.onSignal as EventListener);
   }
 
@@ -56,7 +68,7 @@ export class RoomVoice {
   private onSignal = (ev: Event) => {
     const signal = (ev as CustomEvent<VoiceSignal>).detail;
     if (!signal || signal.fromUserId === this.selfId) return;
-    void this.handle(signal);
+    void this.handle(signal).catch(() => undefined);
   };
 
   private async handle(signal: VoiceSignal) {
@@ -89,9 +101,9 @@ export class RoomVoice {
     }
   }
 
-  private async offerTo(peerId: string) {
+  private async offerTo(peerId: string, iceRestart = false) {
     const pc = this.ensurePeer(peerId);
-    const offer = await pc.createOffer();
+    const offer = await pc.createOffer({ iceRestart });
     await pc.setLocalDescription(offer);
     this.send('offer', offer, peerId);
   }
@@ -99,7 +111,7 @@ export class RoomVoice {
   private ensurePeer(peerId: string) {
     let pc = this.peers.get(peerId);
     if (pc) return pc;
-    pc = new RTCPeerConnection(STUN);
+    pc = new RTCPeerConnection(this.rtcConfig);
     this.stream?.getTracks().forEach((t) => pc!.addTrack(t, this.stream!));
     pc.onicecandidate = (e) => {
       if (e.candidate) this.send('ice', e.candidate, peerId);
@@ -116,6 +128,11 @@ export class RoomVoice {
       el.muted = this.speakerMuted;
       el.srcObject = e.streams[0];
       void el.play().catch(() => undefined);
+    };
+    pc.onconnectionstatechange = () => {
+      if (pc?.connectionState === 'failed' && this.stream) {
+        void this.offerTo(peerId, true).catch(() => undefined);
+      }
     };
     this.peers.set(peerId, pc);
     return pc;

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"chal-jhootha-server/internal/logger"
+	"chal-jhootha-server/internal/metrics"
 	"chal-jhootha-server/internal/rules"
 	"chal-jhootha-server/internal/store"
 	"chal-jhootha-server/internal/ws"
@@ -19,6 +20,7 @@ const (
 	DisconnectSkipAfter    = 60 * time.Second
 	DisconnectAbandonAfter = 3 * time.Minute
 	MaxSeats               = 52 // ponytail: hard seat cap; raise if needed
+	MaxVoiceParticipants   = 8
 	defaultRoomIdleTTL     = 24 * time.Hour
 )
 
@@ -55,8 +57,11 @@ type Room struct {
 	tracker          *IdempotencyTracker
 	disconnectTimers map[string]*time.Timer
 	abandonTimers    map[string]*time.Timer
+	voiceMembers     map[string]bool
+	lastReactionAt   map[string]time.Time
 	persistFn        func(*Room)
 	recordMatchFn    func(matchID, roomCode string, participants []store.MatchParticipant) error
+	activeClientMsg  string
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -88,6 +93,8 @@ func NewRoom(code string, persistFn func(*Room)) *Room {
 		tracker:          NewIdempotencyTracker(256),
 		disconnectTimers: make(map[string]*time.Timer),
 		abandonTimers:    make(map[string]*time.Timer),
+		voiceMembers:     make(map[string]bool),
+		lastReactionAt:   make(map[string]time.Time),
 		persistFn:        persistFn,
 		ctx:              ctx,
 		cancel:           cancel,
@@ -135,7 +142,7 @@ func (r *Room) SetIdleTTL(ttl time.Duration) {
 	}
 }
 
-func (r *Room) replayDuplicate(playerID, clientMsgID string) bool {
+func (r *Room) replayDuplicate(playerID, connID, clientMsgID string) bool {
 	if clientMsgID == "" {
 		return false
 	}
@@ -144,45 +151,56 @@ func (r *Room) replayDuplicate(playerID, clientMsgID string) bool {
 		return false
 	}
 	logger.Debug("IDEMPOTENCY", "Duplicate clientMsgId, replaying ack", "room", r.Code, "msgId", clientMsgID, "seq", seq)
-	r.sendToPlayer(playerID, ws.AckEvent{Type: "ack", ClientMsgID: clientMsgID, AppliedSeq: seq})
+	if r.activeClientMsg == "" {
+		// Direct actor callers from the original protocol still receive the
+		// legacy acknowledgement. WebSocket clients receive action_accepted.
+		r.sendToConn(connID, ws.AckEvent{Type: "ack", ClientMsgID: clientMsgID, AppliedSeq: seq})
+	} else {
+		r.sendToConn(connID, ws.ActionAcceptedEvent{Type: "action_accepted", ClientMsgID: clientMsgID, AppliedSeq: seq})
+	}
 	r.sendSnapshotToPlayer(playerID)
 	return true
 }
 
-func (r *Room) commitAction(clientMsgID string) {
+func (r *Room) commitAction(playerID, connID, clientMsgID string) {
 	r.tracker.Add(clientMsgID, r.seq)
 	r.persist()
+	if clientMsgID != "" && connID != "" {
+		r.sendToConn(connID, ws.ActionAcceptedEvent{Type: "action_accepted", ClientMsgID: clientMsgID, AppliedSeq: r.seq})
+	}
 }
 
 func (r *Room) processMessage(msg RoomMessage) {
+	r.activeClientMsg = msg.ClientMsg
+	defer func() { r.activeClientMsg = "" }()
 	start := time.Now()
 	switch ev := msg.Event.(type) {
 	case *ws.StartGameEvent:
-		if r.replayDuplicate(msg.PlayerID, ev.ClientMsgID) {
+		if r.replayDuplicate(msg.PlayerID, msg.ConnectionID, ev.ClientMsgID) {
 			return
 		}
 		r.handleStartGame(msg.PlayerID, msg.ConnectionID, ev)
 		logger.EventProcessed(r.Code, msg.PlayerID, "start_game", r.seq, time.Since(start))
 	case *ws.SetConfigEvent:
-		if r.replayDuplicate(msg.PlayerID, ev.ClientMsgID) {
+		if r.replayDuplicate(msg.PlayerID, msg.ConnectionID, ev.ClientMsgID) {
 			return
 		}
 		r.handleSetConfig(msg.PlayerID, msg.ConnectionID, ev)
 		logger.EventProcessed(r.Code, msg.PlayerID, "set_config", r.seq, time.Since(start))
 	case *ws.PlayCardsEvent:
-		if r.replayDuplicate(msg.PlayerID, ev.ClientMsgID) {
+		if r.replayDuplicate(msg.PlayerID, msg.ConnectionID, ev.ClientMsgID) {
 			return
 		}
 		r.handlePlayCards(msg.PlayerID, msg.ConnectionID, ev)
 		logger.EventProcessed(r.Code, msg.PlayerID, "play_cards", r.seq, time.Since(start))
 	case *ws.ChallengeEvent:
-		if r.replayDuplicate(msg.PlayerID, ev.ClientMsgID) {
+		if r.replayDuplicate(msg.PlayerID, msg.ConnectionID, ev.ClientMsgID) {
 			return
 		}
 		r.handleChallenge(msg.PlayerID, msg.ConnectionID, ev)
 		logger.EventProcessed(r.Code, msg.PlayerID, "challenge", r.seq, time.Since(start))
 	case *ws.SkipEvent:
-		if r.replayDuplicate(msg.PlayerID, ev.ClientMsgID) {
+		if r.replayDuplicate(msg.PlayerID, msg.ConnectionID, ev.ClientMsgID) {
 			return
 		}
 		r.handleSkip(msg.PlayerID, msg.ConnectionID, ev)
@@ -191,13 +209,15 @@ func (r *Room) processMessage(msg RoomMessage) {
 		r.sendSnapshotToPlayer(msg.PlayerID)
 		logger.EventProcessed(r.Code, msg.PlayerID, "sync_state", r.seq, time.Since(start))
 	case *ws.ResetToLobbyEvent:
-		if r.replayDuplicate(msg.PlayerID, ev.ClientMsgID) {
+		if r.replayDuplicate(msg.PlayerID, msg.ConnectionID, ev.ClientMsgID) {
 			return
 		}
 		r.handleResetToLobby(msg.PlayerID, msg.ConnectionID, ev)
 		logger.EventProcessed(r.Code, msg.PlayerID, "reset_to_lobby", r.seq, time.Since(start))
 	case *ws.VoiceSignalEvent:
 		r.handleVoice(msg.PlayerID, ev)
+	case *ws.ReactionEvent:
+		r.handleReaction(msg.PlayerID, ev)
 	case InternalJoinEvent:
 		r.handleInternalJoin(ev)
 		logger.EventProcessed(r.Code, msg.PlayerID, "internal_join", r.seq, time.Since(start))
@@ -238,6 +258,7 @@ func (r *Room) sendToConn(connID string, event any) {
 	if err != nil {
 		return
 	}
+	metrics.WebSocketOutbound(len(b))
 	select {
 	case st.Outbound <- b:
 	default:
@@ -256,6 +277,7 @@ func (r *Room) sendToPlayer(playerID string, event any) {
 		}
 		select {
 		case st.Outbound <- b:
+			metrics.WebSocketOutbound(len(b))
 		default:
 			logger.ChannelOverflow(r.Code, playerID, "player_send", len(st.Outbound))
 		}
@@ -267,6 +289,7 @@ func (r *Room) sendToOutbound(out chan []byte, event any) {
 	if err != nil {
 		return
 	}
+	metrics.WebSocketOutbound(len(b))
 	select {
 	case out <- b:
 	default:
@@ -282,6 +305,7 @@ func (r *Room) broadcast(event any) {
 	for pID, st := range r.connections {
 		select {
 		case st.Outbound <- b:
+			metrics.WebSocketOutbound(len(b))
 		default:
 			logger.ChannelOverflow(r.Code, pID, "broadcast", len(st.Outbound))
 		}
@@ -361,6 +385,15 @@ func (r *Room) sendSnapshotToPlayer(playerID string) {
 
 func (r *Room) reject(playerID, connID, code, msg string) {
 	ev := ws.ErrorEvent{Type: "error", Code: code, Message: msg}
+	if r.activeClientMsg != "" {
+		ev.ClientMsgID = &r.activeClientMsg
+		rejection := ws.ActionRejectedEvent{Type: "action_rejected", ClientMsgID: r.activeClientMsg, Code: code, Message: msg}
+		if connID != "" {
+			r.sendToConn(connID, rejection)
+		} else {
+			r.sendToPlayer(playerID, rejection)
+		}
+	}
 	if connID != "" {
 		r.sendToConn(connID, ev)
 		return
@@ -482,12 +515,10 @@ func (r *Room) handleInternalJoin(ev InternalJoinEvent) {
 				PlayerID: &playerID, RoomCode: &r.Code, RejoinToken: &token,
 			})
 			r.broadcast(ws.PlayerReconnectedEvent{Type: "player_reconnected", Seq: r.seq, PlayerID: playerID})
-			r.sendToOutbound(ev.Outbound, r.roomStateEvent())
-			if r.State.Phase == ws.PhasePlaying || r.State.Phase == ws.PhaseFinished {
-				r.broadcastGameState()
-			} else {
-				r.broadcastRoomState()
-			}
+			// A reconnect needs a private snapshot, not a full-state broadcast to
+			// every player in the room. Other clients update presence from the
+			// reconnect event above.
+			r.sendSnapshotToPlayer(playerID)
 			r.persist()
 			select {
 			case ev.ReplyChan <- playerID:
@@ -568,6 +599,7 @@ func (r *Room) handleInternalLeave(playerID string, ev InternalLeaveEvent) {
 	if r.controllerConn[playerID] != "" {
 		return // still has a device
 	}
+	delete(r.voiceMembers, playerID)
 
 	for i := range r.State.Players {
 		if r.State.Players[i].ID != playerID {
@@ -595,8 +627,6 @@ func (r *Room) handleInternalLeave(playerID string, ev InternalLeaveEvent) {
 		r.broadcast(ws.PlayerDisconnectedEvent{Type: "player_disconnected", Seq: r.seq, PlayerID: playerID})
 		if r.State.Phase == ws.PhaseLobby {
 			r.broadcastRoomState()
-		} else {
-			r.broadcastGameState()
 		}
 		r.persist()
 		return
@@ -634,7 +664,6 @@ func (r *Room) handleAbandon(ev AbandonEvent) {
 		if r.State.CurrentTurnPlayerID != nil && *r.State.CurrentTurnPlayerID == ev.PlayerID {
 			r.handleSkip(ev.PlayerID, "", &ws.SkipEvent{ExpectedSeq: r.seq})
 		} else {
-			r.broadcastGameState()
 			r.maybeEndGame()
 			r.persist()
 		}
@@ -661,7 +690,7 @@ func (r *Room) handleSetConfig(playerID, connID string, ev *ws.SetConfigEvent) {
 		r.State.WinnerCount = w
 	}
 	r.seq++
-	r.commitAction(ev.ClientMsgID)
+	r.commitAction(playerID, connID, ev.ClientMsgID)
 	r.broadcastRoomState()
 }
 
@@ -690,7 +719,7 @@ func (r *Room) handleResetToLobby(playerID, connID string, ev *ws.ResetToLobbyEv
 	}
 
 	r.seq++
-	r.commitAction(ev.ClientMsgID)
+	r.commitAction(playerID, connID, ev.ClientMsgID)
 	r.broadcastRoomState()
 }
 
@@ -747,7 +776,7 @@ func (r *Room) handleStartGame(playerID, connID string, ev *ws.StartGameEvent) {
 	r.State.ClaimedRank = nil
 	r.State.LastAction = nil
 	logger.Info("GAME", "Game started", "room", r.Code, "players", len(ids), "opener", opener, "decks", r.State.DeckCount, "winnerCount", r.State.WinnerCount)
-	r.commitAction(ev.ClientMsgID)
+	r.commitAction(playerID, connID, ev.ClientMsgID)
 	r.broadcastGameState()
 }
 
@@ -843,7 +872,7 @@ func (r *Room) handlePlayCards(playerID, connID string, ev *ws.PlayCardsEvent) {
 		r.State.CurrentTurnPlayerID = &nextTurn
 	}
 	logger.Info("PLAY", "Cards played", "room", r.Code, "player", playerID, "count", len(playedCards), "remainingHand", len(newHand), "stackTotal", r.State.StackCount)
-	r.commitAction(ev.ClientMsgID)
+	r.commitAction(playerID, connID, ev.ClientMsgID)
 	r.broadcastGameState()
 }
 
@@ -917,7 +946,7 @@ func (r *Room) handleChallenge(playerID, connID string, ev *ws.ChallengeEvent) {
 	r.State.RoundOpenerID = &nextStarterID
 	r.State.LastAction = &ws.LastAction{PlayerID: playerID, Type: ws.ActionChallenge}
 	r.maybeEndGame()
-	r.commitAction(ev.ClientMsgID)
+	r.commitAction(playerID, connID, ev.ClientMsgID)
 	r.broadcastGameState()
 }
 
@@ -958,7 +987,7 @@ func (r *Room) handleSkip(playerID, connID string, ev *ws.SkipEvent) {
 
 	r.maybeEndGame()
 	if ev.ClientMsgID != "" {
-		r.commitAction(ev.ClientMsgID)
+		r.commitAction(playerID, connID, ev.ClientMsgID)
 	} else {
 		r.persist()
 	}
@@ -1021,7 +1050,7 @@ func (r *Room) recordCompletedMatch() {
 		if player.UserID != nil && *player.UserID != "" {
 			userID = *player.UserID
 		}
-		participants = append(participants, store.MatchParticipant{UserID: userID, IsWinner: player.IsWinner})
+		participants = append(participants, store.MatchParticipant{UserID: userID, DisplayName: player.Name, IsWinner: player.IsWinner})
 	}
 	if err := r.recordMatchFn(r.matchID, r.Code, participants); err != nil {
 		logger.Error("STATS", "Failed to record completed match", "room", r.Code, "match", r.matchID, "error", err)
@@ -1029,6 +1058,21 @@ func (r *Room) recordCompletedMatch() {
 }
 
 func (r *Room) handleVoice(fromID string, ev *ws.VoiceSignalEvent) {
+	if ev.Kind == "leave" {
+		delete(r.voiceMembers, fromID)
+	} else {
+		if len(r.State.Players) > MaxVoiceParticipants {
+			r.reject(fromID, "", "VOICE_PLAYER_LIMIT", "Voice chat is disabled when a room has more than eight players")
+			return
+		}
+		if ev.Kind == "join" {
+			if !r.voiceMembers[fromID] && len(r.voiceMembers) >= MaxVoiceParticipants {
+				r.reject(fromID, "", "VOICE_ROOM_LIMIT", "Voice is available for up to eight players per room")
+				return
+			}
+			r.voiceMembers[fromID] = true
+		}
+	}
 	msg := ws.VoiceSignalBroadcast{
 		Type: "voice_signal", FromUserID: fromID,
 		TargetUserID: ev.TargetUserID, Kind: ev.Kind, Payload: ev.Payload,
@@ -1042,4 +1086,32 @@ func (r *Room) handleVoice(fromID string, ev *ws.VoiceSignalEvent) {
 			r.sendToConn(st.ConnID, msg)
 		}
 	}
+}
+
+var allowedReactions = map[string]struct{}{
+	"🔥": {}, "😂": {}, "😮": {}, "👏": {},
+	"🃏": {}, "👀": {}, "😈": {}, "💀": {},
+}
+
+func (r *Room) handleReaction(playerID string, ev *ws.ReactionEvent) {
+	if _, allowed := allowedReactions[ev.Emoji]; !allowed {
+		r.reject(playerID, "", "INVALID_REACTION", "That reaction is not available")
+		return
+	}
+	now := time.Now()
+	if previous := r.lastReactionAt[playerID]; !previous.IsZero() && now.Sub(previous) < 700*time.Millisecond {
+		r.reject(playerID, "", "REACTION_RATE_LIMITED", "Wait a moment before sending another reaction")
+		return
+	}
+	r.lastReactionAt[playerID] = now
+	playerName := "PLAYER"
+	for _, player := range r.State.Players {
+		if player.ID == playerID {
+			playerName = player.Name
+			break
+		}
+	}
+	r.broadcast(ws.ReactionBroadcast{
+		Type: "reaction", ClientMsgID: ev.ClientMsgID, PlayerID: playerID, PlayerName: playerName, Emoji: ev.Emoji,
+	})
 }

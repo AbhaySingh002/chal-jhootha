@@ -17,7 +17,7 @@ async function parse(res: Response) {
   if (!res.ok) {
     throw new Error((data as { error?: string }).error || 'Request failed');
   }
-  return data as { user?: AuthUser | null; activeRoomCode?: string; error?: string; ticket?: string; expiresIn?: number };
+  return data as { user?: AuthUser | null; activeRoomCode?: string; error?: string; ticket?: string; expiresIn?: number; iceServers?: IceServer[] };
 }
 
 export async function ensureGuest(name?: string) {
@@ -57,6 +57,17 @@ export async function fetchWsTicket() {
     throw new Error('ticket failed');
   }
   return data.ticket;
+}
+
+export type IceServer = {
+  urls: string[] | string;
+  username?: string;
+  credential?: string;
+};
+
+export async function fetchVoiceIceServers(): Promise<IceServer[]> {
+  const data = await parse(await fetch(apiURL('/api/voice/turn'), { credentials: 'include', cache: 'no-store' }));
+  return data.iceServers?.length ? data.iceServers : [{ urls: ['stun:stun.l.google.com:19302'] }];
 }
 
 export async function fetchSession() {

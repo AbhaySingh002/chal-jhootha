@@ -15,6 +15,7 @@ import (
 
 	"chal-jhootha-server/internal/auth"
 	"chal-jhootha-server/internal/logger"
+	"chal-jhootha-server/internal/metrics"
 	"chal-jhootha-server/internal/room"
 	"chal-jhootha-server/internal/ws"
 )
@@ -22,12 +23,13 @@ import (
 var validate = validator.New()
 
 type session struct {
-	ConnID   string
-	UserID   string
-	PlayerID string
-	RoomCode string
-	Joined   bool
-	Outbound chan []byte
+	ConnID           string
+	UserID           string
+	IsEphemeralGuest bool
+	PlayerID         string
+	RoomCode         string
+	Joined           bool
+	Outbound         chan []byte
 }
 
 func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.OriginPolicy) http.HandlerFunc {
@@ -39,13 +41,16 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 		connStart := time.Now()
 		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 			InsecureSkipVerify: true,
+			Subprotocols:       []string{"cj-v1"},
 		})
 		if err != nil {
 			logger.Error("WS", "WebSocket handshake accept failed", "error", err, "ip", r.RemoteAddr)
 			return
 		}
 
+		authStarted := time.Now()
 		user, _, ok := authSvc.UserFromRequest(r)
+		metrics.Observe("ws_auth", time.Since(authStarted))
 		if !ok {
 			_ = c.Close(websocket.StatusPolicyViolation, "authentication required")
 			logger.Warn("WS", "Unauthenticated websocket rejected", "ip", r.RemoteAddr)
@@ -58,9 +63,10 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 		logger.Info("WS", "Authenticated connection", "conn", connID, "userId", user.ID)
 
 		sess := &session{
-			ConnID:   connID,
-			UserID:   user.ID,
-			Outbound: make(chan []byte, 128),
+			ConnID:           connID,
+			UserID:           user.ID,
+			IsEphemeralGuest: user.IsEphemeralGuest,
+			Outbound:         make(chan []byte, 128),
 		}
 
 		ctx, cancel := context.WithCancel(r.Context())
@@ -146,6 +152,7 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 			}
 
 			logger.EventReceived(sess.ConnID, sess.RoomCode, sess.PlayerID, base.Type, base.ClientMsgID, len(msgBytes))
+			metrics.WebSocketInbound(len(msgBytes))
 
 			switch base.Type {
 			case "create_room":
@@ -187,8 +194,8 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 				case sess.PlayerID = <-replyChan:
 					if sess.PlayerID != "" {
 						sess.Joined = true
-						if st := rm.Store(); st != nil {
-							_ = st.SetUserRoom(sess.UserID, roomCode)
+						if !sess.IsEphemeralGuest {
+							rm.TrackUserRoom(sess.UserID, roomCode)
 						}
 						logger.Info("ROOM", "Room created", "room", roomCode, "player", sess.PlayerID)
 					}
@@ -241,8 +248,8 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 				case sess.PlayerID = <-replyChan:
 					if sess.PlayerID != "" {
 						sess.Joined = true
-						if st := rm.Store(); st != nil {
-							_ = st.SetUserRoom(sess.UserID, ev.RoomCode)
+						if !sess.IsEphemeralGuest {
+							rm.TrackUserRoom(sess.UserID, ev.RoomCode)
 						}
 					} else {
 						sess.RoomCode = ""
@@ -293,6 +300,12 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 					_ = json.Unmarshal(msgBytes, &ev)
 					return &ev
 				})
+			case "reaction":
+				sess.forwardToRoom(rm, base.ClientMsgID, msgBytes, func() any {
+					var ev ws.ReactionEvent
+					_ = json.Unmarshal(msgBytes, &ev)
+					return &ev
+				})
 			case "reset_to_lobby":
 				sess.forwardToRoom(rm, base.ClientMsgID, msgBytes, func() any {
 					var ev ws.ResetToLobbyEvent
@@ -338,6 +351,7 @@ func (s *session) forwardToRoom(rm *room.Manager, clientMsgID string, msgBytes [
 	case rmRoom.Inbox <- room.RoomMessage{
 		ConnectionID: s.ConnID,
 		PlayerID:     s.PlayerID,
+		ClientMsg:    clientMsgID,
 		Event:        ev,
 	}:
 	default:

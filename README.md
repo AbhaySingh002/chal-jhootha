@@ -129,9 +129,28 @@ FRONTEND_ORIGINS=https://<vercel-project>.vercel.app
 COOKIE_SECURE=1
 COOKIE_SAME_SITE=none
 ROOM_IDLE_TTL=24h
+GUEST_SESSION_SECRET=<long random secret, shared by every API instance>
 LOG_FORMAT=json
 LOG_LEVEL=info
 ```
+
+Optional voice relay support uses coturn REST credentials. Configure both values
+on the API (never expose the shared secret to the browser):
+
+```bash
+TURN_URLS=turn:turn.example.com:3478?transport=udp,turns:turn.example.com:5349?transport=tcp
+TURN_SHARED_SECRET=<coturn static-auth-secret>
+```
+
+The API exposes lightweight process counters at `/api/metrics` for socket
+payloads, room-action latency totals, and persistence retries/failures. Protect
+that route at the edge before exposing a production service publicly.
+
+The current release is deliberately a single stateful game gateway. Run one API
+replica until Redis-backed room ownership and an outbox worker are deployed;
+adding stateless replicas beforehand can split an active room. Voice is enabled
+for rooms of up to eight players; for larger rooms, deploy an SFU such as
+LiveKit rather than lifting the mesh-voice limit.
 
 Use the same Render region for the API and Postgres. Configure an external monitor to request `/healthz` every five minutes when using a free Render web service. Free Render services can still restart, and free Render Postgres expires after 30 days without backups. Platform URLs use cross-site cookies, so moving later to matching `app.` and `api.` subdomains is the more reliable browser-auth setup.
 

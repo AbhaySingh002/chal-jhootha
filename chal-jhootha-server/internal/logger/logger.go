@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"chal-jhootha-server/internal/metrics"
 )
 
 // ANSI color codes for rich, high-contrast terminal debugging
@@ -259,6 +261,7 @@ func EventReceived(connID, roomCode, playerID, eventType, msgID string, size int
 }
 
 func EventProcessed(roomCode, playerID, eventType string, seq int, duration time.Duration) {
+	metrics.Observe("room_action_"+eventType, duration)
 	slog.Info("Event Processed",
 		slog.String("tag", "GAME"),
 		slog.String("room", roomCode),

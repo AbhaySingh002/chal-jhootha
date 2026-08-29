@@ -66,6 +66,19 @@ export interface AckEvent {
   rejoinToken?: string;
 }
 
+export interface ActionAcceptedEvent {
+  type: 'action_accepted';
+  clientMsgId: string;
+  appliedSeq: number;
+}
+
+export interface ActionRejectedEvent {
+  type: 'action_rejected';
+  clientMsgId: string;
+  code: string;
+  message: string;
+}
+
 export interface ErrorEvent {
   type: 'error';
   clientMsgId?: string;
@@ -101,6 +114,14 @@ export interface VoiceSignalEvent extends BaseServerEvent {
   payload?: unknown;
 }
 
+export interface ReactionEvent {
+  type: 'reaction';
+  clientMsgId: string;
+  playerId: string;
+  playerName: string;
+  emoji: string;
+}
+
 export type ServerEvent =
   | RoomStateEvent
   | GameStateEvent
@@ -108,9 +129,12 @@ export type ServerEvent =
   | StackBurnedEvent
   | PlayerWonEvent
   | AckEvent
+  | ActionAcceptedEvent
+  | ActionRejectedEvent
   | ErrorEvent
   | PlayerDisconnectedEvent
   | PlayerReconnectedEvent
   | PlayerAbandonedEvent
   | DeviceSupersededEvent
-  | VoiceSignalEvent;
+  | VoiceSignalEvent
+  | ReactionEvent;

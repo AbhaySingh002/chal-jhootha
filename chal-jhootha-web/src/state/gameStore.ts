@@ -4,6 +4,12 @@ import { PROTOCOL_VERSION } from 'shared';
 import { sendEvent, connectSocket } from '../ws/socket';
 import { ensureGuest } from '../lib/auth';
 
+type PendingAction = {
+  clientMsgId: string;
+  type: 'start_game' | 'reset_to_lobby' | 'set_config' | 'play_cards' | 'challenge' | 'skip';
+  startedAt: number;
+};
+
 interface GameStore {
   playerId: string | null;
   roomCode: string | null;
@@ -17,6 +23,7 @@ interface GameStore {
   isConnected: boolean;
   connectionStatus: ConnectionStatus;
   lastError: string | null;
+  pendingAction: PendingAction | null;
   youAreController: boolean;
   yourRole: PlayerRole | null;
 
@@ -30,6 +37,7 @@ interface GameStore {
   skip: () => void;
   requestSync: () => void;
   sendVoice: (kind: string, payload?: unknown, targetUserId?: string) => void;
+  sendReaction: (emoji: string) => void;
   resetSession: () => void;
   setConnectionStatus: (s: ConnectionStatus) => void;
   onConnected: () => void;
@@ -62,6 +70,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isConnected: false,
   connectionStatus: 'OFFLINE',
   lastError: null,
+  pendingAction: null,
   youAreController: true,
   yourRole: null,
 
@@ -107,54 +116,66 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   startGame: () => {
-    sendEvent({ type: 'start_game', clientMsgId: crypto.randomUUID(), protocolVersion: PROTOCOL_VERSION });
+    const clientMsgId = crypto.randomUUID();
+    set({ pendingAction: { clientMsgId, type: 'start_game', startedAt: Date.now() }, lastError: null });
+    sendEvent({ type: 'start_game', clientMsgId, protocolVersion: PROTOCOL_VERSION });
   },
 
   resetToLobby: () => {
-    sendEvent({ type: 'reset_to_lobby', clientMsgId: crypto.randomUUID(), protocolVersion: PROTOCOL_VERSION });
+    const clientMsgId = crypto.randomUUID();
+    set({ pendingAction: { clientMsgId, type: 'reset_to_lobby', startedAt: Date.now() }, lastError: null });
+    sendEvent({ type: 'reset_to_lobby', clientMsgId, protocolVersion: PROTOCOL_VERSION });
   },
 
   setConfig: (deckCount, winnerCount) => {
+    const clientMsgId = crypto.randomUUID();
+    set({ pendingAction: { clientMsgId, type: 'set_config', startedAt: Date.now() }, lastError: null });
     sendEvent({
       type: 'set_config',
       deckCount,
       winnerCount,
-      clientMsgId: crypto.randomUUID(),
+      clientMsgId,
       protocolVersion: PROTOCOL_VERSION,
     });
   },
 
   playCards: (cardIds, claimedRank) => {
-    const { lastSeq, connectionStatus, youAreController, yourRole } = get();
-    if (connectionStatus !== 'CONNECTED' || !youAreController || yourRole === 'winner_spectator') return;
+    const { lastSeq, connectionStatus, youAreController, yourRole, pendingAction } = get();
+    if (connectionStatus !== 'CONNECTED' || !youAreController || yourRole === 'winner_spectator' || pendingAction) return;
+    const clientMsgId = crypto.randomUUID();
+    set({ pendingAction: { clientMsgId, type: 'play_cards', startedAt: Date.now() }, lastError: null });
     sendEvent({
       type: 'play_cards',
       cardIds,
       claimedRank: claimedRank as any,
       expectedSeq: lastSeq,
-      clientMsgId: crypto.randomUUID(),
+      clientMsgId,
       protocolVersion: PROTOCOL_VERSION,
     });
   },
 
   challenge: () => {
-    const { lastSeq, connectionStatus, youAreController } = get();
-    if (connectionStatus !== 'CONNECTED' || !youAreController) return;
+    const { lastSeq, connectionStatus, youAreController, pendingAction } = get();
+    if (connectionStatus !== 'CONNECTED' || !youAreController || pendingAction) return;
+    const clientMsgId = crypto.randomUUID();
+    set({ pendingAction: { clientMsgId, type: 'challenge', startedAt: Date.now() }, lastError: null });
     sendEvent({
       type: 'challenge',
       expectedSeq: lastSeq,
-      clientMsgId: crypto.randomUUID(),
+      clientMsgId,
       protocolVersion: PROTOCOL_VERSION,
     });
   },
 
   skip: () => {
-    const { lastSeq, connectionStatus, youAreController } = get();
-    if (connectionStatus !== 'CONNECTED' || !youAreController) return;
+    const { lastSeq, connectionStatus, youAreController, pendingAction } = get();
+    if (connectionStatus !== 'CONNECTED' || !youAreController || pendingAction) return;
+    const clientMsgId = crypto.randomUUID();
+    set({ pendingAction: { clientMsgId, type: 'skip', startedAt: Date.now() }, lastError: null });
     sendEvent({
       type: 'skip',
       expectedSeq: lastSeq,
-      clientMsgId: crypto.randomUUID(),
+      clientMsgId,
       protocolVersion: PROTOCOL_VERSION,
     });
   },
@@ -175,6 +196,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
+  sendReaction: (emoji) => {
+    sendEvent({
+      type: 'reaction',
+      emoji,
+      clientMsgId: crypto.randomUUID(),
+      protocolVersion: PROTOCOL_VERSION,
+    });
+  },
+
   resetSession: () => {
     sessionStorage.removeItem('playerId');
     sessionStorage.removeItem('roomCode');
@@ -190,6 +220,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastBurned: false,
       lastSeq: 0,
       lastError: null,
+      pendingAction: null,
       youAreController: true,
       yourRole: null,
     });
@@ -208,7 +239,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     switch (event.type) {
       case 'error':
-        set({ lastError: event.message, connectionStatus: state.isConnected ? 'CONNECTED' : state.connectionStatus });
+        set({
+          lastError: event.message,
+          pendingAction: event.clientMsgId === state.pendingAction?.clientMsgId ? null : state.pendingAction,
+          connectionStatus: state.isConnected ? 'CONNECTED' : state.connectionStatus,
+        });
         break;
       case 'ack':
         if (event.rejoinToken && event.playerId && event.roomCode) {
@@ -222,6 +257,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
           });
         }
         if (event.appliedSeq) set({ lastSeq: event.appliedSeq });
+        break;
+      case 'action_accepted':
+        set({
+          lastSeq: event.appliedSeq || state.lastSeq,
+          pendingAction: event.clientMsgId === state.pendingAction?.clientMsgId ? null : state.pendingAction,
+        });
+        break;
+      case 'action_rejected':
+        set({
+          lastError: event.message,
+          pendingAction: event.clientMsgId === state.pendingAction?.clientMsgId ? null : state.pendingAction,
+          connectionStatus: state.isConnected ? 'CONNECTED' : state.connectionStatus,
+        });
         break;
       case 'room_state': {
         const activeRoomCode = state.roomCode || sessionStorage.getItem('roomCode') || '';
@@ -299,15 +347,42 @@ export const useGameStore = create<GameStore>((set, get) => ({
         });
         break;
       case 'player_disconnected':
+        set({
+          lastSeq: event.seq,
+          gameState: state.gameState ? {
+            ...state.gameState,
+            players: state.gameState.players.map((player) => player.id === event.playerId ? { ...player, isDisconnected: true } : player),
+          } : null,
+        });
+        break;
       case 'player_reconnected':
+        set({
+          lastSeq: event.seq,
+          gameState: state.gameState ? {
+            ...state.gameState,
+            players: state.gameState.players.map((player) => player.id === event.playerId ? { ...player, isDisconnected: false, isAbandoned: false } : player),
+          } : null,
+        });
+        break;
       case 'player_abandoned':
-        set({ lastSeq: event.seq });
+        set({
+          lastSeq: event.seq,
+          gameState: state.gameState ? {
+            ...state.gameState,
+            players: state.gameState.players.map((player) => player.id === event.playerId ? { ...player, isAbandoned: true, role: 'abandoned' } : player),
+          } : null,
+        });
         break;
       case 'device_superseded':
         set({ youAreController: false });
         break;
       case 'voice_signal':
         window.dispatchEvent(new CustomEvent('cj-voice', { detail: event }));
+        break;
+      case 'reaction':
+        window.dispatchEvent(new CustomEvent('cj-reaction', {
+          detail: { id: event.clientMsgId, playerName: event.playerName, emoji: event.emoji },
+        }));
         break;
     }
   },

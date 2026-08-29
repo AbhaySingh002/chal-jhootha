@@ -67,10 +67,7 @@ export const Profile: React.FC = () => {
 
   useEffect(() => {
     if (isPending) return;
-    if (!isRegistered) {
-      setIsLoading(false);
-      return;
-    }
+    if (!isRegistered) return;
 
     let active = true;
     const load = async () => {
@@ -180,7 +177,7 @@ export const Profile: React.FC = () => {
     }
   };
 
-  if (isPending || isLoading) {
+  if (isPending || (isRegistered && isLoading)) {
     return (
       <div className="page-shell">
         <Navbar currentTab={activeTab === 'friends' ? 'friends' : 'profile'} />

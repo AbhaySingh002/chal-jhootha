@@ -1,13 +1,19 @@
 package auth
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha1"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"chal-jhootha-server/internal/logger"
@@ -18,13 +24,45 @@ import (
 )
 
 const (
-	CookieName  = "cj_session"
-	SessionTTL  = 30 * 24 * time.Hour
-	WSTicketTTL = 45 * time.Second
+	CookieName      = "cj_session"
+	SessionTTL      = 30 * 24 * time.Hour
+	GuestSessionTTL = 24 * time.Hour
+	WSTicketTTL     = 45 * time.Second
 )
 
 type Service struct {
 	Store *store.Store
+}
+
+type wsTicketEntry struct {
+	user      *store.User
+	expiresAt time.Time
+}
+
+type sessionEntry struct {
+	user      *store.User
+	expiresAt time.Time
+}
+
+type guestClaim struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Exp  int64  `json:"exp"`
+}
+
+var (
+	memWsTickets sync.Map
+	memSessions  sync.Map
+)
+
+func deleteMemoryTicketsForUser(userID string) {
+	memWsTickets.Range(func(key, value any) bool {
+		entry, ok := value.(wsTicketEntry)
+		if ok && entry.user != nil && entry.user.ID == userID {
+			memWsTickets.Delete(key)
+		}
+		return true
+	})
 }
 
 type User struct {
@@ -48,6 +86,32 @@ func (s *Service) UserFromRequest(r *http.Request) (*store.User, string, bool) {
 	if token == "" {
 		return nil, "", false
 	}
+	if guest, ok := guestFromToken(token); ok {
+		return guest, token, true
+	}
+
+	// 1. Fast in-memory session lookup
+	if val, ok := memSessions.Load(token); ok {
+		entry := val.(sessionEntry)
+		if time.Now().Before(entry.expiresAt) {
+			return entry.user, token, true
+		}
+		memSessions.Delete(token)
+	}
+
+	// 2. Fast in-memory WS ticket lookup
+	if val, ok := memWsTickets.Load(token); ok {
+		entry := val.(wsTicketEntry)
+		memWsTickets.Delete(token)
+		if time.Now().Before(entry.expiresAt) && entry.user != nil {
+			return entry.user, token, true
+		}
+	}
+
+	// 3. Fallback to database session store
+	if s.Store == nil {
+		return nil, token, false
+	}
 	userID, ok, err := s.Store.GetSession(token)
 	if err != nil {
 		return nil, token, false
@@ -62,6 +126,13 @@ func (s *Service) UserFromRequest(r *http.Request) (*store.User, string, bool) {
 	if err != nil || u == nil {
 		return nil, token, false
 	}
+
+	// Cache validated session in RAM for 5 minutes
+	memSessions.Store(token, sessionEntry{
+		user:      u,
+		expiresAt: time.Now().Add(5 * time.Minute),
+	})
+
 	return u, token, true
 }
 
@@ -72,13 +143,19 @@ func tokenFromRequest(r *http.Request) string {
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(h), "bearer ") {
 		return strings.TrimSpace(h[7:])
 	}
+	for _, protocol := range strings.Split(r.Header.Get("Sec-WebSocket-Protocol"), ",") {
+		protocol = strings.TrimSpace(protocol)
+		if strings.HasPrefix(protocol, "cj-auth-") {
+			return strings.TrimPrefix(protocol, "cj-auth-")
+		}
+	}
 	if ticket := strings.TrimSpace(r.URL.Query().Get("ticket")); ticket != "" {
 		return ticket
 	}
 	return ""
 }
 
-func (s *Service) setCookie(w http.ResponseWriter, token string) {
+func (s *Service) setCookie(w http.ResponseWriter, token string, ttl time.Duration) {
 	secure := os.Getenv("COOKIE_SECURE") == "1" || os.Getenv("ENV") == "production"
 	sameSite := cookieSameSite()
 	if sameSite == http.SameSiteNoneMode {
@@ -88,11 +165,53 @@ func (s *Service) setCookie(w http.ResponseWriter, token string) {
 		Name:     CookieName,
 		Value:    token,
 		Path:     "/",
-		MaxAge:   int(SessionTTL.Seconds()),
+		MaxAge:   int(ttl.Seconds()),
 		HttpOnly: true,
 		Secure:   secure,
 		SameSite: sameSite,
 	})
+}
+
+func guestSessionSecret() []byte {
+	if raw := strings.TrimSpace(os.Getenv("GUEST_SESSION_SECRET")); raw != "" {
+		return []byte(raw)
+	}
+	// Local development must work without extra setup. Production deployments
+	// should always set GUEST_SESSION_SECRET so sessions survive replacement.
+	return []byte("chal-jhootha-development-guest-session-secret")
+}
+
+func newGuestToken(id, name string) (string, error) {
+	claims, err := json.Marshal(guestClaim{ID: id, Name: name, Exp: time.Now().Add(GuestSessionTTL).Unix()})
+	if err != nil {
+		return "", err
+	}
+	payload := base64.RawURLEncoding.EncodeToString(claims)
+	mac := hmac.New(sha256.New, guestSessionSecret())
+	_, _ = mac.Write([]byte(payload))
+	return "g." + payload + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+}
+
+func guestFromToken(token string) (*store.User, bool) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 || parts[0] != "g" {
+		return nil, false
+	}
+	mac := hmac.New(sha256.New, guestSessionSecret())
+	_, _ = mac.Write([]byte(parts[1]))
+	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil || !hmac.Equal(signature, mac.Sum(nil)) {
+		return nil, false
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, false
+	}
+	var claim guestClaim
+	if json.Unmarshal(payload, &claim) != nil || claim.ID == "" || claim.Name == "" || time.Now().Unix() >= claim.Exp {
+		return nil, false
+	}
+	return &store.User{ID: claim.ID, DisplayName: claim.Name, IsEphemeralGuest: true}, true
 }
 
 func (s *Service) clearCookie(w http.ResponseWriter) {
@@ -139,7 +258,13 @@ func (s *Service) issueSession(w http.ResponseWriter, userID string) error {
 	if err := s.Store.PutSession(token, userID, SessionTTL); err != nil {
 		return err
 	}
-	s.setCookie(w, token)
+	if u, err := s.Store.GetUser(userID); err == nil && u != nil {
+		memSessions.Store(token, sessionEntry{
+			user:      u,
+			expiresAt: time.Now().Add(5 * time.Minute),
+		})
+	}
+	s.setCookie(w, token, SessionTTL)
 	return nil
 }
 
@@ -238,7 +363,10 @@ func (s *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) HandleGuest(w http.ResponseWriter, r *http.Request) {
 	if u, _, ok := s.UserFromRequest(r); ok {
-		room, _, _ := s.Store.GetUserRoom(u.ID)
+		room := ""
+		if !u.IsEphemeralGuest {
+			room, _, _ = s.Store.GetUserRoom(u.ID)
+		}
 		writeJSON(w, 200, map[string]any{"user": s.publicUser(u), "activeRoomCode": room})
 		return
 	}
@@ -254,26 +382,28 @@ func (s *Service) HandleGuest(w http.ResponseWriter, r *http.Request) {
 		name = name[:16]
 	}
 	id := uuid.NewString()
-	if err := s.Store.CreateUser(id, name, nil, nil); err != nil {
-		writeJSON(w, 500, map[string]string{"error": "create failed"})
-		return
-	}
-	if err := s.issueSession(w, id); err != nil {
+	token, err := newGuestToken(id, name)
+	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": "session failed"})
 		return
 	}
+	s.setCookie(w, token, GuestSessionTTL)
 	logger.Info("AUTH", "Guest session created", "userId", id)
-	u, _ := s.Store.GetUser(id)
-	writeJSON(w, 201, map[string]any{"user": s.publicUser(u)})
+	writeJSON(w, 201, map[string]any{"user": s.publicUser(&store.User{ID: id, DisplayName: name, IsEphemeralGuest: true})})
 }
 
 func (s *Service) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	if u, token, ok := s.UserFromRequest(r); ok {
-		_ = s.Store.DeleteWSTicketsForUser(u.ID)
-		if token != "" {
+		deleteMemoryTicketsForUser(u.ID)
+		if !u.IsEphemeralGuest {
+			_ = s.Store.DeleteWSTicketsForUser(u.ID)
+		}
+		if token != "" && !u.IsEphemeralGuest {
+			memSessions.Delete(token)
 			_ = s.Store.DeleteSession(token)
 		}
 	} else if c, err := r.Cookie(CookieName); err == nil {
+		memSessions.Delete(c.Value)
 		_ = s.Store.DeleteSession(c.Value)
 	}
 	s.clearCookie(w)
@@ -291,10 +421,22 @@ func (s *Service) HandleWsTicket(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "ticket failed"})
 		return
 	}
-	if err := s.Store.PutWSTicket(ticket, u.ID, WSTicketTTL); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "ticket failed"})
-		return
+
+	// 1. Fast in-memory registration for immediate WS connect
+	memWsTickets.Store(ticket, wsTicketEntry{
+		user:      u,
+		expiresAt: time.Now().Add(WSTicketTTL),
+	})
+
+	// Registered users retain a database fallback across process replacement.
+	// Stateless guest tickets are intentionally memory-only; their signed cookie
+	// can mint a fresh ticket immediately after a reconnect.
+	if !u.IsEphemeralGuest {
+		go func() {
+			_ = s.Store.PutWSTicket(ticket, u.ID, WSTicketTTL)
+		}()
 	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ticket":    ticket,
 		"expiresIn": int(WSTicketTTL.Seconds()),
@@ -307,8 +449,45 @@ func (s *Service) HandleSession(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"user": nil})
 		return
 	}
-	room, _, _ := s.Store.GetUserRoom(u.ID)
+	room := ""
+	if !u.IsEphemeralGuest {
+		room, _, _ = s.Store.GetUserRoom(u.ID)
+	}
 	writeJSON(w, 200, map[string]any{"user": s.publicUser(u), "activeRoomCode": room})
+}
+
+// HandleTurnCredentials implements coturn's REST authentication format. TURN
+// stays optional for local development; without TURN_URLS the client retains
+// STUN-only behavior rather than receiving unusable placeholder credentials.
+func (s *Service) HandleTurnCredentials(w http.ResponseWriter, r *http.Request) {
+	u, _, ok := s.UserFromRequest(r)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+		return
+	}
+	urls := make([]string, 0)
+	for _, raw := range strings.Split(os.Getenv("TURN_URLS"), ",") {
+		if value := strings.TrimSpace(raw); value != "" {
+			urls = append(urls, value)
+		}
+	}
+	secret := strings.TrimSpace(os.Getenv("TURN_SHARED_SECRET"))
+	if len(urls) == 0 || secret == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"iceServers": []map[string]any{{"urls": []string{"stun:stun.l.google.com:19302"}}}})
+		return
+	}
+	expiresAt := time.Now().Add(15 * time.Minute).Unix()
+	username := strconv.FormatInt(expiresAt, 10) + ":" + u.ID
+	mac := hmac.New(sha1.New, []byte(secret))
+	_, _ = mac.Write([]byte(username))
+	credential := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	writeJSON(w, http.StatusOK, map[string]any{
+		"iceServers": []map[string]any{
+			{"urls": []string{"stun:stun.l.google.com:19302"}},
+			{"urls": urls, "username": username, "credential": credential},
+		},
+		"expiresIn": 900,
+	})
 }
 
 type OriginPolicy struct {
