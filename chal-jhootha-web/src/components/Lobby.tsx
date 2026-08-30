@@ -125,29 +125,29 @@ export const Lobby: React.FC = () => {
   return (
     <div className="page-shell lobby-shell">
       {/* Top Header */}
-      <header className="lobby-header page-container mb-6 flex items-center justify-between gap-3 sm:mb-8">
-          <button
+      <header className="lobby-header page-container mb-6 sm:mb-8">
+        <button
           type="button"
           onClick={handleLeaveLobby}
-          className="brutal-btn brutal-btn-compact inline-flex items-center gap-1.5 bg-surface text-xs text-ink"
+          className="lobby-header-exit brutal-btn brutal-btn-compact inline-flex items-center gap-1.5 bg-surface text-xs text-ink"
         >
           <ArrowLeft size={15} strokeWidth={2.5} />
           <span>Exit Room</span>
+        </button>
+
+        {isHost ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm('Destroy this room for every player?')) destroyRoom();
+            }}
+            className="lobby-header-destroy brutal-btn brutal-btn-compact bg-evidence-red text-xs text-white"
+          >
+            Destroy
           </button>
+        ) : null}
 
-          {isHost ? (
-            <button
-              type="button"
-              onClick={() => {
-                if (window.confirm('Destroy this room for every player?')) destroyRoom();
-              }}
-              className="brutal-btn brutal-btn-compact bg-evidence-red text-xs text-white"
-            >
-              Destroy
-            </button>
-          ) : null}
-
-        <ThemeToggle />
+        <ThemeToggle className="lobby-header-theme" />
       </header>
 
       <main className="lobby-main page-container grid items-start gap-6 pb-12 lg:grid-cols-[minmax(0,1.25fr)_minmax(19rem,0.75fr)]">
@@ -155,8 +155,8 @@ export const Lobby: React.FC = () => {
         <section className="lobby-roster-card brutal-card overflow-hidden">
           {/* Card Header Banner */}
           <div className="lobby-roster-header border-b-[3px] border-ink bg-ink p-4 text-paper sm:p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
+            <div className="lobby-roster-banner">
+              <div className="lobby-roster-title">
                 <span className="inline-block border border-caution-yellow bg-caution-yellow/20 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-caution-yellow">
                   LOBBY
                 </span>
@@ -212,11 +212,11 @@ export const Lobby: React.FC = () => {
                 return (
                   <li
                     key={player.id}
-                    className={`flex items-center justify-between border-2 border-ink p-3 shadow-[2px_2px_0_var(--color-ink)] ${
+                    className={`lobby-player-row border-2 border-ink p-3 shadow-[2px_2px_0_var(--color-ink)] ${
                       isYou ? 'bg-caution-yellow/20' : 'bg-paper'
                     }`}
                   >
-                    <div className="flex min-w-0 items-center gap-2.5">
+                    <div className="lobby-player-identity">
                       <span className="flex h-7 w-7 shrink-0 items-center justify-center border-2 border-ink bg-surface font-display text-xs text-evidence-red">
                         {String(index + 1).padStart(2, '0')}
                       </span>
@@ -235,7 +235,7 @@ export const Lobby: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="lobby-player-actions">
                       {targetUserId && (
                         <button
                           type="button"
@@ -257,10 +257,14 @@ export const Lobby: React.FC = () => {
                         </button>
                       )}
                       {player.id === gameState.hostId && (
-                        <Crown size={17} className="text-caution-yellow" strokeWidth={2.5} aria-label="Host" />
+                        <span className="lobby-player-indicator text-caution-yellow" title="Host">
+                          <Crown size={17} strokeWidth={2.5} aria-label="Host" />
+                        </span>
                       )}
                       {player.isDisconnected && (
-                        <WifiOff size={16} className="text-evidence-red" strokeWidth={2.5} aria-label="Away" />
+                        <span className="lobby-player-indicator text-evidence-red" title="Away">
+                          <WifiOff size={16} strokeWidth={2.5} aria-label="Away" />
+                        </span>
                       )}
                     </div>
                   </li>
@@ -356,7 +360,7 @@ export const Lobby: React.FC = () => {
               type="button"
               disabled={playerCount < 2}
               onClick={startGame}
-              className="brutal-btn flex w-full items-center justify-center gap-2 bg-confirmed-green text-white transition-transform active:scale-[0.98]"
+              className="lobby-start-action brutal-btn flex w-full items-center justify-center gap-2 bg-confirmed-green text-white transition-transform active:scale-[0.98]"
             >
               <Trophy size={18} strokeWidth={2.5} />
               <span>{playerCount < 2 ? 'Need 2+ Players' : `Start Match (${playerCount} Seated)`}</span>

@@ -90,7 +90,27 @@ export const Home: React.FC = () => {
           </div>
 
           <h1 className="home-title font-display text-[clamp(2.5rem,8.5vw,5.5rem)] leading-[0.88] tracking-[-0.05em] text-ink">
-            <span lang="hi" className="hero-hindi">चल</span><br />JHOOTHA
+            <span className="hero-wordmark">
+              <span aria-hidden="true" className="hero-dealer">
+                <svg className="hero-card-vector hero-card-vector--back" viewBox="0 0 32 44" focusable="false">
+                  <rect x="4" y="4" width="26" height="38" rx="3" fill="var(--color-ink)" />
+                  <rect x="2" y="2" width="28" height="40" rx="3" fill="var(--color-surface)" stroke="currentColor" strokeWidth="2.5" />
+                  <path d="M6 8h6v2H6z" fill="currentColor" />
+                  <path d="M16 13l4 5-4 5-4-5 4-5Z" fill="currentColor" />
+                  <path d="M16 26l4.5 5.5-4.5 5.5-4.5-5.5L16 26Z" fill="currentColor" />
+                </svg>
+                <svg className="hero-card-vector hero-card-vector--front" viewBox="0 0 32 44" focusable="false">
+                  <rect x="4" y="4" width="26" height="38" rx="3" fill="var(--color-ink)" />
+                  <rect x="2" y="2" width="28" height="40" rx="3" fill="var(--color-surface)" stroke="currentColor" strokeWidth="2.5" />
+                  <path d="M6 8h6v2H6z" fill="currentColor" />
+                  <path d="M16 12c-2.6 3.1-6 5-6 8.1 0 2 1.4 3.4 3.3 3.4 1.2 0 2.1-.6 2.7-1.4l-1.2 4.7h2.4L16 22.1c.6.8 1.5 1.4 2.7 1.4 1.9 0 3.3-1.4 3.3-3.4C22 17 18.6 15.1 16 12Z" fill="currentColor" />
+                </svg>
+                <svg className="hero-dealer-pip" viewBox="0 0 16 20" focusable="false">
+                  <path d="M8 1l7 9-7 9-7-9L8 1Z" fill="currentColor" />
+                </svg>
+              </span>
+              <span className="hero-word">CHAL</span>
+            </span><br />JHOOTHA
           </h1>
 
           <p className="home-description mt-4 max-w-md border-l-[3px] border-ink pl-3.5 font-mono text-sm font-semibold leading-relaxed text-ink-muted sm:text-base">
