@@ -168,11 +168,10 @@ export const Lobby: React.FC = () => {
 
               <div className="lobby-action-group flex flex-wrap items-center gap-2 sm:gap-2.5" role="group" aria-label={`Invite players to room ${gameState.roomCode}`}>
                 <div
-                  className="lobby-code-badge flex h-10 sm:h-11 items-center justify-center gap-1.5 rounded-lg border-2 border-ink bg-surface px-3 font-mono shadow-[2px_2px_0_var(--color-ink)]"
+                  className="lobby-code-badge flex h-10 sm:h-11 items-center justify-center rounded-lg border-2 border-ink bg-surface px-3.5 font-mono shadow-[2px_2px_0_var(--color-ink)] select-all"
                   title="Room Code"
                 >
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">Code</span>
-                  <span className="text-xs sm:text-sm font-black tracking-[0.18em] text-ink">{gameState.roomCode}</span>
+                  <span className="text-sm sm:text-base font-black tracking-[0.2em] text-ink">{gameState.roomCode}</span>
                 </div>
                 <button
                   type="button"
