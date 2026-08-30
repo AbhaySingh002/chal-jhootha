@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import type { Card as PlayingCard, GameState } from 'shared';
-import { LogOut, Mic, MicOff, Radio, RotateCcw, SmilePlus, Volume2, VolumeX } from 'lucide-react';
+import { ChevronDown, ChevronUp, LogOut, Mic, MicOff, Radio, RotateCcw, SmilePlus, Volume2, VolumeX } from 'lucide-react';
 import { useLocation, useParams } from 'wouter';
 import { useSession } from '../lib/auth';
 import { ActionBar } from '../components/ActionBar';
@@ -144,12 +144,24 @@ export const GameRoom: React.FC = () => {
   const [rosterOpen, setRosterOpen] = useState(false);
   const [flights, setFlights] = useState<CardFlight[]>([]);
   const [concealedCardIds, setConcealedCardIds] = useState<string[]>([]);
+  const reactionDockRef = useRef<HTMLDivElement>(null);
   const hasAttemptedJoin = useRef(false);
   const animationSnapshotRef = useRef<AnimationSnapshot | null>(null);
   const pendingPickupRef = useRef<PendingPickup | null>(null);
   const processedChallengeSeqsRef = useRef(new Set<number>());
   const flightSequenceRef = useRef(0);
   const reduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (!reactionsOpen) return;
+    const handleOutsideClick = (e: PointerEvent) => {
+      if (reactionDockRef.current && !reactionDockRef.current.contains(e.target as Node)) {
+        setReactionsOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handleOutsideClick);
+    return () => document.removeEventListener('pointerdown', handleOutsideClick);
+  }, [reactionsOpen]);
 
   const storedToken = typeof window !== 'undefined' ? sessionStorage.getItem('rejoinToken') : null;
   const storedRoom = typeof window !== 'undefined' ? sessionStorage.getItem('roomCode') : null;
@@ -467,22 +479,48 @@ export const GameRoom: React.FC = () => {
           </p>
         ) : null}
 
-        <div className="reaction-dock">
-          {reactionsOpen ? (
-            <div id="table-reactions" className="reaction-panel" role="group" aria-label="Send a table reaction">
-              {REACTIONS.map((emoji) => <button key={emoji} type="button" onClick={() => sendTableReaction(emoji)} className="reaction-button" aria-label={`Send ${emoji} reaction`}>{emoji}</button>)}
-            </div>
-          ) : null}
+        <div ref={reactionDockRef} className="reaction-dock">
+          <AnimatePresence>
+            {reactionsOpen && (
+              <motion.div
+                id="table-reactions"
+                className="reaction-panel"
+                role="group"
+                aria-label="Send a table reaction"
+                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.94 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.94 }}
+                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              >
+                {REACTIONS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => sendTableReaction(emoji)}
+                    className="reaction-button"
+                    aria-label={`Send ${emoji} reaction`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
           <button
             type="button"
             onClick={() => setReactionsOpen((open) => !open)}
-            className="reaction-toggle"
+            className="reaction-toggle inline-flex items-center gap-1.5"
             aria-expanded={reactionsOpen}
             aria-controls="table-reactions"
             aria-label={reactionsOpen ? 'Hide table reactions' : 'Show table reactions'}
           >
-            <SmilePlus size={19} strokeWidth={2.5} />
-            <span className="hidden sm:inline">Reactions</span>
+            <SmilePlus size={16} strokeWidth={2.5} className="text-evidence-red" />
+            <span className="text-[11px] sm:text-xs">Reactions</span>
+            {reactionsOpen ? (
+              <ChevronDown size={14} strokeWidth={2.5} className="text-ink-muted" />
+            ) : (
+              <ChevronUp size={14} strokeWidth={2.5} className="text-ink-muted" />
+            )}
           </button>
         </div>
       </main>

@@ -392,27 +392,30 @@
 
   .lobby-invite-controls {
     display: inline-flex;
-    min-height: 44px;
-    overflow: hidden;
-    align-items: stretch;
-    border: 2.5px solid var(--color-ink);
-    border-radius: 0.625rem;
-    background: var(--color-surface);
-    box-shadow: var(--shadow-offset-sm) var(--shadow-offset-sm) 0 var(--color-ink);
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    background: transparent;
   }
 
-  .lobby-room-code {
+  .lobby-room-code-chip {
     display: inline-flex;
-    min-width: 4.25rem;
+    min-height: 42px;
     align-items: center;
     justify-content: center;
-    padding-inline: 0.65rem;
+    border: 2px solid var(--color-ink);
+    border-radius: 0.5rem;
+    background: var(--color-surface);
+    padding-inline: 0.85rem;
+    box-shadow: 2px 2px 0 var(--color-ink);
   }
 
   .lobby-invite-controls .icon-btn,
   .lobby-invite-controls .brutal-btn {
-    min-height: 44px;
-    box-shadow: none;
+    min-height: 42px;
+    border: 2px solid var(--color-ink);
+    border-radius: 0.5rem;
+    box-shadow: 2px 2px 0 var(--color-ink);
   }
 }
 
@@ -556,9 +559,11 @@
     gap: 0.75rem;
   }
   .lobby-roster-header h1 { font-size: 1.35rem; }
-  .lobby-roster-header .lobby-invite-controls { max-width: 100%; }
-  .lobby-room-code { min-width: 3.3rem; padding-inline: 0.35rem; }
-  .lobby-invite-controls .brutal-btn { padding-inline: 0.55rem; }
+  .lobby-roster-header .lobby-invite-controls { max-width: 100%; gap: 0.4rem; }
+  .lobby-room-code-chip { min-height: 38px; padding-inline: 0.65rem; }
+  .lobby-invite-controls .icon-btn,
+  .lobby-invite-controls .brutal-btn { min-height: 38px; }
+  .lobby-invite-controls .brutal-btn { padding-inline: 0.65rem; }
 
   .lobby-roster-list {
     min-height: 0;
@@ -611,20 +616,22 @@
 
 .reaction-button {
   display: inline-flex;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 2.65rem;
+  height: 2.65rem;
   align-items: center;
   justify-content: center;
   border: 2px solid var(--color-ink);
   border-radius: 0.5rem;
   background: var(--color-paper);
   box-shadow: 2px 2px 0 var(--color-ink);
-  font-size: 1.2rem;
+  font-size: 1.25rem;
   line-height: 1;
+  cursor: pointer;
+  user-select: none;
   transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
-.reaction-button:hover { background: var(--color-caution-yellow); }
+.reaction-button:hover { background: var(--color-caution-yellow); transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--color-ink); }
 .reaction-button:active { box-shadow: 0 0 0 var(--color-ink); transform: translate(2px, 2px); }
 
 .reaction-dock {
@@ -636,7 +643,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   pointer-events: none;
 }
 
@@ -644,23 +651,22 @@
 
 .reaction-panel {
   display: grid;
-  grid-template-columns: repeat(4, 2.75rem);
-  gap: 0.5rem;
+  grid-template-columns: repeat(4, 2.65rem);
+  gap: 0.4rem;
   justify-content: center;
   border: 2px solid var(--color-ink);
-  border-radius: 0.625rem;
-  background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
   padding: 0.5rem;
   box-shadow: 3px 3px 0 var(--color-ink);
 }
 
 .reaction-toggle {
   display: inline-flex;
-  min-width: 44px;
-  min-height: 44px;
+  min-height: 36px;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   border: 2px solid var(--color-ink);
   border-radius: 0.5rem;
   background: var(--color-surface);
@@ -671,6 +677,7 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  cursor: pointer;
   transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
