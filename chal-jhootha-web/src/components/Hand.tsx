@@ -178,7 +178,7 @@ export const Hand: React.FC<{ selectedCards: string[]; onSelect: (id: string) =>
                 key={card.id}
                 style={{
                   marginLeft: idx > 0 ? `${-(cardWidth - step)}px` : 0,
-                  zIndex: selectedCards.includes(card.id) ? 40 : idx + 1,
+                  zIndex: idx + 1,
                 }}
               >
                 <CardComponent
