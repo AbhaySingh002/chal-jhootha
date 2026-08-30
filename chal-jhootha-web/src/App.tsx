@@ -18,8 +18,8 @@ const PublicProfile = lazy(() => import('./pages/PublicProfile').then(module => 
 function App() {
   return (
     <Suspense fallback={<div className="page-shell flex items-center justify-center min-h-screen text-sand font-mono uppercase text-xs">Loading...</div>}>
+      <ScrollToTop />
       <Switch>
-        <ScrollToTop />
         <Route path="/" component={Home} />
         <Route path="/room/:code" component={GameRoom} />
         <Route path="/auth" component={Auth} />
