@@ -295,7 +295,7 @@ export const Lobby: React.FC = () => {
                   <span>Waiting for players</span>
                 </div>
                 <p className="mt-1 font-mono text-[11px] text-ink-muted">
-                  Need at least 2 players to start. Share the invite link with friends.
+                  Need at least 2 players to start. Share the code with friends.
                 </p>
               </div>
             ) : isHost ? (
