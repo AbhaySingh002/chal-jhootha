@@ -19,6 +19,15 @@
   color-scheme: light;
   --shadow-offset: 5px;
   --shadow-offset-sm: 3px;
+  --page-gutter: 1rem;
+  --page-bottom-gutter: 2.5rem;
+  --control-hit-size: 44px;
+  --game-hand-scroll-height: clamp(8.25rem, 22dvh, 9.75rem);
+  --game-hand-card-width: 4.5rem;
+  --game-hand-card-height: 7rem;
+  --game-seat-label-width: 4.75rem;
+  --game-stack-width: clamp(5.5rem, 16vw, 7.5rem);
+  --game-stack-height: clamp(7.5rem, 23vw, 10.5rem);
   --suit-black: #171717;
   --suit-red: #b92a33;
   --card-back-stripe: rgba(255, 255, 255, 0.05);
@@ -44,10 +53,11 @@
 @layer base {
   * { box-sizing: border-box; }
 
-  html { min-width: 320px; background: var(--color-paper); }
+  html { min-width: 320px; background: var(--color-paper); overflow-x: clip; }
 
   body {
     min-width: 320px;
+    min-height: 100svh;
     min-height: 100dvh;
     margin: 0;
     overflow-x: hidden;
@@ -57,6 +67,8 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  #root { min-width: 0; }
 
   button, input, select, textarea { font: inherit; }
 
@@ -74,23 +86,28 @@
 
 @layer utilities {
   .page-shell {
+    min-height: 100svh;
     min-height: 100dvh;
-    padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1.5rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    padding: max(var(--page-gutter), env(safe-area-inset-top)) max(var(--page-gutter), env(safe-area-inset-right)) max(var(--page-bottom-gutter), env(safe-area-inset-bottom)) max(var(--page-gutter), env(safe-area-inset-left));
     background: var(--color-paper);
   }
 
-  .page-container { width: min(100%, 72rem); margin-inline: auto; }
+  .page-container { width: min(100%, 72rem); min-width: 0; margin-inline: auto; }
 
   /* Game layout shell — full-viewport flex column with safe-area */
   .game-shell {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100svh;
     height: 100dvh;
+    min-width: 0;
     min-height: 0;
     overflow: hidden;
     background: var(--color-paper);
     font-family: var(--font-sans);
   }
+
+  .game-header-stack { min-width: 0; }
 
   /* Sticky game top bar */
   .game-topbar {
@@ -118,8 +135,8 @@
   /* The tappable control remains 44px while its visual surface is smaller. */
   .game-voice-hitbox {
     display: inline-flex;
-    width: 44px;
-    height: 44px;
+    width: var(--control-hit-size);
+    height: var(--control-hit-size);
     align-items: center;
     justify-content: center;
     border: 0;
@@ -146,38 +163,43 @@
 
   /* Flexible game table area */
   .table-area {
-    flex: 1 1 0%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: 1.5rem max(0.75rem, env(safe-area-inset-right)) 1rem max(0.75rem, env(safe-area-inset-left));
-    min-height: 12rem;
+    min-width: 0;
+    min-height: 0;
     overflow: hidden;
   }
 
   .game-table-area {
-    flex: 1 1 auto;
     min-height: 0;
     justify-content: stretch;
     overflow: hidden;
   }
 
   .game-table-stage {
-    flex: 1 1 auto;
     height: 100%;
+    min-width: 0;
     min-height: 0;
+    isolation: isolate;
   }
 
   /* Bottom action/hand region */
   .bottom-bar {
-    flex: 0 0 auto;
+    display: grid;
+    grid-template-rows: auto auto;
+    gap: 0.5rem;
     margin-top: 0;
+    min-width: 0;
     min-height: 0;
     border-top: 3px solid var(--color-ink);
     background: var(--color-surface);
     padding: 0.75rem max(0.75rem, env(safe-area-inset-right)) max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
   }
+
+  .game-actions { min-width: 0; }
 
   .brutal-shadow { box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--color-ink); }
   .brutal-shadow-sm { box-shadow: var(--shadow-offset-sm) var(--shadow-offset-sm) 0 var(--color-ink); }
@@ -210,8 +232,8 @@
 
   .icon-btn {
     display: inline-flex;
-    width: 44px;
-    height: 44px;
+    width: var(--control-hit-size);
+    height: var(--control-hit-size);
     align-items: center;
     justify-content: center;
     border: 2.5px solid var(--color-ink);
@@ -423,8 +445,15 @@
 }
 
 @media (min-width: 640px) {
-  :root { --shadow-offset: 6px; --shadow-offset-sm: 4px; }
-  .page-shell { padding-inline: max(1.5rem, env(safe-area-inset-right)); }
+  :root {
+    --shadow-offset: 6px;
+    --shadow-offset-sm: 4px;
+    --page-gutter: 1.5rem;
+    --game-hand-scroll-height: clamp(10rem, 25dvh, 12rem);
+    --game-hand-card-width: 6rem;
+    --game-hand-card-height: 9rem;
+    --game-seat-label-width: 6.25rem;
+  }
   .brutal-btn { font-size: 1rem; }
   .game-topbar { padding-inline: max(1rem, env(safe-area-inset-right)); gap: 0.5rem; }
   .table-area { padding: 1.5rem max(1rem, env(safe-area-inset-right)); }
@@ -439,8 +468,8 @@
   .bottom-bar .brutal-btn { min-height: 44px; padding-inline: 0.5rem; }
 }
 
-/* Entry and lobby surfaces stay inside a phone viewport. The Lobby content is
-   its own scroll region so small rooms do not stretch into an empty card. */
+/* Content pages deliberately use document scrolling. Game-only surfaces use a
+   bounded grid so controls never force the hand below the viewport. */
 @media (max-width: 639px) {
   .game-topbar-compact {
     padding-top: max(0.45rem, env(safe-area-inset-top));
@@ -465,106 +494,98 @@
   }
 
   .game-hand [data-hand-scroll] {
-    height: clamp(8.25rem, 22dvh, 9.75rem);
+    height: var(--game-hand-scroll-height);
     min-height: 0;
     padding-block: 0.35rem;
   }
 
   .home-shell,
   .lobby-shell {
-    height: 100dvh;
-    min-height: 0;
-    overflow: hidden;
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 100svh;
+    min-height: 100dvh;
   }
 
   .home-shell .app-nav,
   .lobby-header {
-    margin-bottom: 0.75rem;
+    margin-bottom: 1rem;
   }
 
   .home-main {
-    min-height: 0;
-    align-content: start;
+    display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 0.75rem;
-    overflow: hidden;
-    padding-bottom: 0;
+    gap: 1.5rem;
+    overflow: visible;
+    padding-bottom: max(2.5rem, env(safe-area-inset-bottom));
   }
 
-  .home-hero { padding-top: 0; }
-  .home-protocol { margin-bottom: 0.5rem; padding: 0.4rem 0.55rem; font-size: 0.6rem; }
-  .home-title { font-size: clamp(2.35rem, 11vw, 3.15rem); }
-  .home-description { margin-top: 0.65rem; padding-left: 0.65rem; font-size: 0.75rem; line-height: 1.4; }
-  .home-badges { margin-top: 0.75rem; gap: 0.5rem; font-size: 0.6rem; }
-  .home-badges > div { gap: 0.35rem; padding: 0.35rem 0.5rem; }
+  .home-hero { padding-top: 0.25rem; }
+  .home-title { font-size: clamp(2.35rem, 11vw, 3.5rem); line-height: 0.9; }
+  .home-description { margin-top: 0.75rem; padding-left: 0.75rem; font-size: 0.8125rem; line-height: 1.45; }
+  .home-badges { margin-top: 0.875rem; gap: 0.5rem; font-size: 0.65rem; }
+  .home-badges > div { gap: 0.35rem; padding: 0.35rem 0.6rem; }
 
   .home-match {
-    min-height: 0;
-    padding: 1rem;
+    padding: 1.25rem 1.125rem;
+    margin-bottom: 0.5rem;
   }
 
-  .home-match > .mb-5 { margin-bottom: 0.75rem; padding-bottom: 0.65rem; }
-  .home-match .my-5 { margin-block: 0.75rem; }
-  .home-match .mb-5 { margin-bottom: 0.75rem; }
+  .home-match > .mb-5 { margin-bottom: 0.875rem; padding-bottom: 0.65rem; }
+  .home-match .my-5 { margin-block: 0.875rem; }
+  .home-match .mb-5 { margin-bottom: 0.875rem; }
   .home-match .brutal-input,
-  .home-match .brutal-btn { min-height: 44px; padding: 0.55rem 0.75rem; }
-  .home-match .space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.5rem; }
+  .home-match .brutal-btn { min-height: 48px; padding: 0.65rem 0.85rem; }
+  .home-match .space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.625rem; }
 
   .lobby-main {
-    height: 100%;
-    min-height: 0;
-    display: block;
-    gap: 0.75rem;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    padding: 0 0.2rem max(0.75rem, env(safe-area-inset-bottom));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+    padding: 0 0 max(2.5rem, env(safe-area-inset-bottom));
+    overflow: visible;
   }
 
   .lobby-roster-card {
     min-height: initial;
   }
 
-  .lobby-roster-header { padding: 0.75rem; }
+  .lobby-roster-header { padding: 0.875rem 1rem; }
   .lobby-roster-banner {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
     justify-items: start;
-    gap: 0.7rem;
+    gap: 0.75rem;
   }
-  .lobby-roster-header h1 { font-size: 1.3rem; }
+  .lobby-roster-header h1 { font-size: 1.35rem; }
   .lobby-roster-header .lobby-invite-controls { max-width: 100%; }
   .lobby-room-code { min-width: 3.3rem; padding-inline: 0.35rem; }
   .lobby-invite-controls .brutal-btn { padding-inline: 0.55rem; }
 
   .lobby-roster-list {
     min-height: 0;
-    max-block-size: min(19rem, 40dvh);
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    padding: 0.75rem;
+    overflow: visible;
+    padding: 0.875rem;
   }
   .lobby-roster-list > ul { align-content: start; gap: 0.6rem; }
   .lobby-roster-list li { padding: 0.65rem; }
+  .lobby-roster-list--scroll {
+    max-block-size: min(32dvh, 22rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
 
   .lobby-player-row { min-height: 4.5rem; gap: 0.6rem; }
   .lobby-player-actions { gap: 0.35rem; }
   .lobby-player-actions .icon-btn { width: 44px; height: 44px; }
 
-  .lobby-settings { display: grid; gap: 0.75rem; margin-top: 0.75rem; }
+  .lobby-settings { display: grid; gap: 1rem; margin-top: 0; }
   .lobby-settings > * + * { margin-top: 0 !important; }
-  .lobby-settings-card { padding: 0.75rem; }
+  .lobby-settings-card { padding: 1rem; }
   .lobby-settings-heading { margin-bottom: 0.65rem; padding-bottom: 0.55rem; }
   .lobby-settings-heading h2 { font-size: 1.1rem; }
   .lobby-config-fields { display: grid; gap: 0.6rem; }
   .lobby-config-fields > * + * { margin-top: 0 !important; }
   .lobby-settings-card .brutal-select { min-height: 44px; padding: 0.5rem 0.65rem; }
   .lobby-start-action {
-    position: sticky;
-    bottom: 0.2rem;
-    z-index: 1;
     min-height: 48px;
   }
 }
@@ -576,8 +597,6 @@
 /* iPad uses a bounded wider table, not stretched controls. */
 @media (min-width: 640px) and (max-width: 1024px) {
   .table-stage { max-width: 44rem; }
-  .table-area { min-height: 24rem; }
-  .game-table-area { min-height: 0; }
   .bottom-bar > div { max-width: 44rem; }
 }
 
@@ -675,4 +694,117 @@
   16% { opacity: 1; transform: translateY(0) scale(1.1) rotate(4deg); }
   72% { opacity: 1; transform: translateY(-38px) scale(1); }
   100% { opacity: 0; transform: translateY(-82px) scale(0.85); }
+}
+
+/* Responsive game primitives. These stay scoped to the table so the card
+   components used in flight effects keep their existing presentation. */
+.game-shell .game-hand {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.game-shell .game-hand [data-hand-scroll] {
+  height: var(--game-hand-scroll-height);
+  min-height: 0;
+  max-width: 100%;
+  overscroll-behavior-inline: contain;
+}
+
+.game-shell .hand-playing-card {
+  width: var(--game-hand-card-width) !important;
+  height: var(--game-hand-card-height) !important;
+}
+
+.game-shell .game-player-seat {
+  max-inline-size: min(var(--game-seat-label-width), 22vw);
+}
+
+.game-shell .game-seat-avatar {
+  width: clamp(2.25rem, 10vw, 3rem) !important;
+  height: clamp(2.25rem, 10vw, 3rem) !important;
+}
+
+.game-shell .game-seat-name {
+  max-inline-size: min(var(--game-seat-label-width), 22vw) !important;
+}
+
+.game-stack-card {
+  width: var(--game-stack-width);
+  height: var(--game-stack-height);
+}
+
+.table-reaction-layer {
+  position: absolute;
+  z-index: 15;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.game-claim-composer { min-width: 0; }
+.game-action-row { min-width: 0; }
+
+.lobby-modal-overlay,
+.nav-invites-overlay,
+.game-verdict-overlay {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  padding-left: max(1rem, env(safe-area-inset-left));
+}
+
+.lobby-modal-dialog,
+.nav-invites-dialog,
+.game-verdict-dialog {
+  max-block-size: min(82dvh, 42rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 390px) {
+  .public-profile-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .public-profile-stats > :last-child { grid-column: span 2; }
+  .page-shell main > *,
+  .page-shell section { min-width: 0; }
+}
+
+/* Phone landscape is constrained by height, not width. Keep the playable hand
+   available and move the multi-row opening declaration above the table. */
+@media (max-height: 620px) and (orientation: landscape) {
+  .game-shell {
+    --game-hand-scroll-height: 8.75rem;
+    --game-hand-card-width: 4.25rem;
+    --game-hand-card-height: 6.5rem;
+    --game-seat-label-width: 4.25rem;
+    --game-stack-width: 4.5rem;
+    --game-stack-height: 5.75rem;
+  }
+
+  .game-topbar-compact {
+    min-height: var(--control-hit-size);
+    padding-top: max(0.25rem, env(safe-area-inset-top));
+    padding-bottom: 0.2rem;
+  }
+
+  .game-table-area { padding-block: 0.15rem; }
+  .game-shell .game-hand { padding-block: 0.25rem; }
+  .game-shell .game-hand [data-hand-scroll] { padding-block: 0.25rem; }
+  .game-shell .game-seat-avatar { width: 2.25rem !important; height: 2.25rem !important; }
+  .game-shell .game-seat-name { font-size: 9px; }
+  .game-shell .game-seat-cards { font-size: 8px; }
+  .reaction-dock { bottom: 0.15rem; }
+  .reaction-panel { gap: 0.35rem; padding: 0.35rem; }
+
+  .game-actions:has(.game-claim-composer) { min-height: 0; }
+  .game-claim-composer {
+    position: fixed;
+    z-index: 45;
+    inset: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+    width: min(100% - 1.5rem, 40rem);
+    max-height: calc(100dvh - 1.5rem);
+    margin: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
 }

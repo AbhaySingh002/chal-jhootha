@@ -119,8 +119,8 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = 'play' }) => {
       </div>
 
       {showInvites && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4" onClick={(event) => { if (event.target === event.currentTarget) setShowInvites(false); }}>
-          <section className="brutal-card w-full max-w-sm p-5 shadow-[6px_6px_0_var(--color-ink)]" aria-label="Room invitations">
+        <div className="nav-invites-overlay fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4" onClick={(event) => { if (event.target === event.currentTarget) setShowInvites(false); }}>
+          <section className="nav-invites-dialog brutal-card w-full max-w-sm p-5 shadow-[6px_6px_0_var(--color-ink)]" aria-label="Room invitations">
             <div className="flex items-center justify-between border-b-2 border-ink pb-2">
               <h2 className="font-display text-xl uppercase">Live Invites</h2>
               <button type="button" className="icon-btn h-11 w-11" onClick={() => setShowInvites(false)} aria-label="Close invitations"><X size={16} /></button>

@@ -412,26 +412,21 @@ export const GameRoom: React.FC = () => {
       <BrutalistStamp show={!!lastChallengeResult} text={lastChallengeResult?.wasBluff ? 'LIAR' : 'TRUTH'} color={lastChallengeResult?.wasBluff ? 'red' : 'green'} />
       <BrutalistStamp show={lastBurned} text="BURNED" color="black" />
       <p aria-live="polite" className="sr-only">{actionDescription}</p>
-      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 top-[32%] z-40 mx-auto h-36 max-w-xl" aria-label="Table reactions">
-        {reactions.map((reaction, index) => (
-          <div key={reaction.id} className="table-reaction" style={{ left: `${18 + ((index * 19) % 62)}%`, animationDelay: `${(index % 3) * 45}ms` }}>
-            <span>{reaction.emoji}</span><small>{reaction.playerName}</small>
-          </div>
-        ))}
-      </div>
 
       {/* ── Compact game controls ── */}
-      <header className="game-topbar game-topbar-compact">
-        <button type="button" onClick={handleLeaveGame} className="icon-btn" aria-label="Leave room" title="Leave room"><LogOut size={19} strokeWidth={2.5} /></button>
-        <div className="game-voice-controls">
-          {voiceUnavailable ? <DisabledVoiceControls /> : <ActiveVoiceControls key={playerId ?? 'pending'} playerId={playerId} sendVoice={sendVoice} onVoiceError={setVoiceError} />}
-        </div>
-      </header>
+      <div className="game-header-stack">
+        <header className="game-topbar game-topbar-compact">
+          <button type="button" onClick={handleLeaveGame} className="icon-btn" aria-label="Leave room" title="Leave room"><LogOut size={19} strokeWidth={2.5} /></button>
+          <div className="game-voice-controls">
+            {voiceUnavailable ? <DisabledVoiceControls /> : <ActiveVoiceControls key={playerId ?? 'pending'} playerId={playerId} sendVoice={sendVoice} onVoiceError={setVoiceError} />}
+          </div>
+        </header>
 
-      {/* ── Status banners ── */}
-      {(isReconnecting || connectionStatus === 'SYNCING') ? <p role="status" className="border-b-2 border-ink bg-evidence-red px-3 py-2 text-center font-mono text-xs font-bold uppercase text-white">{connectionStatus === 'SYNCING' ? 'Syncing room state' : 'Connection lost. Reconnecting.'}</p> : null}
-      {yourRole === 'winner_spectator' ? <p className="border-b-2 border-ink bg-confirmed-green px-3 py-2 text-center font-mono text-xs font-bold uppercase text-white">You finished this match. Spectator mode is on.</p> : null}
-      {voiceUnavailable ? <p role="status" className="border-b-2 border-ink bg-surface-muted px-3 py-2 text-center font-mono text-xs font-bold uppercase text-ink-muted">Voice chat is disabled for rooms with more than 8 players.</p> : null}
+        {/* ── Status banners ── */}
+        {(isReconnecting || connectionStatus === 'SYNCING') ? <p role="status" className="border-b-2 border-ink bg-evidence-red px-3 py-2 text-center font-mono text-xs font-bold uppercase text-white">{connectionStatus === 'SYNCING' ? 'Syncing room state' : 'Connection lost. Reconnecting.'}</p> : null}
+        {yourRole === 'winner_spectator' ? <p className="border-b-2 border-ink bg-confirmed-green px-3 py-2 text-center font-mono text-xs font-bold uppercase text-white">You finished this match. Spectator mode is on.</p> : null}
+        {voiceUnavailable ? <p role="status" className="border-b-2 border-ink bg-surface-muted px-3 py-2 text-center font-mono text-xs font-bold uppercase text-ink-muted">Voice chat is disabled for rooms with more than 8 players.</p> : null}
+      </div>
 
       {/* ── Open table play area ── */}
       <main className="table-area game-table-area relative flex-1 w-full min-h-0 px-2 py-3 select-none">
@@ -439,6 +434,14 @@ export const GameRoom: React.FC = () => {
           {/* Centered played-card pile */}
           <div className="z-10 flex flex-col items-center">
             <Stack />
+          </div>
+
+          <div aria-live="polite" className="table-reaction-layer" aria-label="Table reactions">
+            {reactions.map((reaction, index) => (
+              <div key={reaction.id} className="table-reaction" style={{ left: `${18 + ((index * 19) % 62)}%`, top: '44%', animationDelay: `${(index % 3) * 45}ms` }}>
+                <span>{reaction.emoji}</span><small>{reaction.playerName}</small>
+              </div>
+            ))}
           </div>
 
           {/* Player seats arranged around the central stack */}
@@ -486,7 +489,7 @@ export const GameRoom: React.FC = () => {
 
       {/* ── Bottom action/hand region ── */}
       <div className="bottom-bar">
-        <div className="mx-auto w-full max-w-2xl">
+        <div className="game-actions mx-auto w-full max-w-2xl">
           <ActionBar selectedCards={currentSelectedCards} clearSelection={() => setSelectedCards([])} />
         </div>
         <Hand selectedCards={currentSelectedCards} onSelect={toggleSelect} concealedCardIds={concealedCardIds} />
@@ -496,8 +499,8 @@ export const GameRoom: React.FC = () => {
 
       {/* ── Verdict overlay ── */}
       {gameState.phase === 'finished' ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-ink/70 p-4 pt-[max(1rem,env(safe-area-inset-top))] text-center backdrop-blur-sm">
-          <section className="my-auto w-full max-w-md border-3 border-ink bg-surface p-5 shadow-[6px_6px_0_var(--color-ink)] sm:p-6">
+        <div className="game-verdict-overlay fixed inset-0 z-50 flex items-center justify-center bg-ink/70 p-4 pt-[max(1rem,env(safe-area-inset-top))] text-center backdrop-blur-sm">
+          <section className="game-verdict-dialog my-auto w-full max-w-md border-3 border-ink bg-surface p-5 shadow-[6px_6px_0_var(--color-ink)] sm:p-6">
             <span className="inline-block border border-ink bg-evidence-red px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-white">
               MATCH CONCLUDED
             </span>

@@ -25,7 +25,7 @@ export function PlayerRosterSheet({
     <AnimatePresence>
       {open ? (
         <motion.div
-          className="fixed inset-0 z-50 flex items-end bg-ink/60 p-3 pt-16 sm:items-center sm:justify-center sm:p-6"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 p-2 pt-[max(0.5rem,env(safe-area-inset-top))] sm:items-center sm:p-6"
           role="presentation"
           initial={reduceMotion ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -35,7 +35,7 @@ export function PlayerRosterSheet({
           }}
         >
           <motion.section
-            className="safe-bottom max-h-[min(78dvh,42rem)] w-full max-w-xl overflow-y-auto border-[3px] border-ink bg-surface shadow-[6px_6px_0_var(--color-ink)]"
+            className="safe-bottom max-h-[min(85dvh,42rem)] w-full max-w-xl overflow-y-auto border-[3px] border-ink bg-surface shadow-[6px_6px_0_var(--color-ink)]"
             role="dialog"
             aria-modal="true"
             aria-labelledby="roster-title"

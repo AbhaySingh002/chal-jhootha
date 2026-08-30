@@ -62,7 +62,7 @@ export const ActionBar: React.FC<{ selectedCards: string[]; clearSelection: () =
       {lastError ? <p role="alert" className="mb-2 border-2 border-ink bg-evidence-red px-3 py-2 text-center font-mono text-xs font-bold text-white">{lastError}</p> : null}
       <AnimatePresence mode="wait">
       {isSelectingClaims ? (
-        <motion.div key="claim-composer" initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.18 }} className="border-3 border-ink bg-surface p-3 shadow-[4px_4px_0_var(--color-ink)] sm:p-4">
+        <motion.div key="claim-composer" initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.18 }} className="game-claim-composer border-3 border-ink bg-surface p-3 shadow-[4px_4px_0_var(--color-ink)] sm:p-4">
           <div className="mb-3 flex items-center justify-between gap-3"><div><p className="font-display text-lg uppercase">Declare your play</p><p className="font-mono text-xs text-ink-muted">Claim counts must equal {selectedCards.length}. The last group locks the round rank.</p></div><button type="button" onClick={() => { setIsSelectingClaims(false); setClaims([]); }} className="icon-btn" aria-label="Cancel claim selection"><X size={19} strokeWidth={2.5} /></button></div>
           <div className="space-y-2" aria-label="Opening claims">
             {claims.map((claim, index) => <div key={`${claim.rank}-${index}`} className="grid grid-cols-[minmax(0,1fr)_5rem_auto] items-center gap-2 border-2 border-ink bg-paper p-2">
@@ -80,7 +80,7 @@ export const ActionBar: React.FC<{ selectedCards: string[]; clearSelection: () =
           {!claimsAreValid ? <p role="alert" className="mt-2 font-mono text-xs font-bold text-evidence-red">Make each rank unique and claim exactly {selectedCards.length} cards.</p> : null}
         </motion.div>
       ) : (
-        <motion.div key="actions" initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.16 }} className="grid grid-cols-3 gap-2">
+        <motion.div key="actions" initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.16 }} className="game-action-row grid grid-cols-3 gap-2">
           <button type="button" disabled={!hasSelected} onClick={playSelected} className={clsx('brutal-btn flex min-w-0 items-center justify-center gap-1.5 px-2 text-xs sm:text-sm', hasSelected ? 'bg-caution-yellow text-ink' : 'bg-surface-muted text-ink-muted')} aria-label={hasSelected ? `Play ${selectedCards.length} selected cards` : 'Select cards to play'}><Play size={17} strokeWidth={2.5} /><span>{hasSelected ? `Play ${selectedCards.length}` : 'Play'}</span></button>
           <button type="button" disabled={!gameState.topPlay} onClick={challenge} className={clsx('brutal-btn flex min-w-0 items-center justify-center gap-1.5 px-2 text-xs sm:text-sm', gameState.topPlay ? 'bg-evidence-red text-white' : 'bg-surface-muted text-ink-muted')} aria-label={gameState.topPlay ? `Call out ${topPlayer}` : 'Nothing to call out'}><CircleHelp size={17} strokeWidth={2.5} /><span>{gameState.topPlay ? 'Callout' : 'Callout'}</span></button>
           <button type="button" onClick={skip} className="brutal-btn flex min-w-0 items-center justify-center gap-1.5 bg-ink px-2 text-xs text-white sm:text-sm"><SkipForward size={17} strokeWidth={2.5} /><span>Skip</span></button>

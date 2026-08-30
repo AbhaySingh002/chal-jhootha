@@ -16,8 +16,7 @@ export const Stack: React.FC = () => {
       <div className="relative flex flex-col items-center justify-center">
         <div
           data-card-stack-anchor
-          className="flex items-center justify-center rounded-xl border-2 border-dashed border-ink/30 bg-surface/30 shadow-[2px_2px_0_var(--color-ink)]"
-          style={{ width: 'clamp(5.5rem, 16vw, 7.5rem)', height: 'clamp(7.5rem, 23vw, 10.5rem)' }}
+          className="game-stack-card flex items-center justify-center rounded-xl border-2 border-dashed border-ink/30 bg-surface/30 shadow-[2px_2px_0_var(--color-ink)]"
         >
           <span className="px-2 text-center font-mono text-xs font-bold uppercase tracking-[0.12em] text-ink-muted">
             Empty stack
@@ -38,8 +37,7 @@ export const Stack: React.FC = () => {
     <div className="relative flex flex-col items-center justify-center">
       <div
         data-card-stack-anchor
-        className="relative flex items-center justify-center"
-        style={{ width: 'clamp(5.5rem, 16vw, 7.5rem)', height: 'clamp(7.5rem, 23vw, 10.5rem)' }}
+        className="game-stack-card relative flex items-center justify-center"
       >
         <AnimatePresence>
           {stackCards.map((_, i) => (

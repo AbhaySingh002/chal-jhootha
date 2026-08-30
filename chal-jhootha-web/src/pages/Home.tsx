@@ -85,10 +85,6 @@ export const Home: React.FC = () => {
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
           className="home-hero min-w-0 pt-2 lg:pt-6"
         >
-          <div className="home-protocol mb-3 inline-flex items-center gap-1.5 rounded-md border-2 border-ink bg-evidence-red px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[2px_2px_0_var(--color-ink)]">
-            <span>OFFICIAL BLUFF PROTOCOL</span>
-          </div>
-
           <h1 className="home-title font-display text-[clamp(2.5rem,8.5vw,5.5rem)] leading-[0.88] tracking-[-0.05em] text-ink">
             <span className="hero-wordmark">
               <span aria-hidden="true" className="hero-dealer">

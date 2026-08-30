@@ -15,14 +15,14 @@ export const PlayerSeat: React.FC<{ player: Player; position: number; total: num
   };
   const avatarMark = avatarMarks[player.avatarId || ''] || player.name.substring(0, 2).toUpperCase();
 
-  // Fixed percentage slots avoid the previous viewport-sized transform that
-  // could place a seat beneath the game header on short phone screens.
+  // The ring keeps label width inside the table stage at narrow widths while
+  // preserving a clear center lane for the stack and reactions.
   const seatSlots: Record<number, Array<[number, number]>> = {
-    1: [[50, 20]],
-    2: [[26, 29], [74, 29]],
-    3: [[16, 40], [50, 20], [84, 40]],
-    4: [[12, 47], [34, 29], [66, 29], [88, 47]],
-    5: [[12, 51], [30, 37], [50, 20], [70, 37], [88, 51]],
+    1: [[50, 24]],
+    2: [[27, 31], [73, 31]],
+    3: [[17, 43], [50, 24], [83, 43]],
+    4: [[16, 50], [35, 31], [65, 31], [84, 50]],
+    5: [[16, 52], [31, 38], [50, 24], [69, 38], [84, 52]],
   };
   const [left, top] = (seatSlots[Math.min(total, 5)]?.[position] ?? seatSlots[1][0]);
 
@@ -30,7 +30,7 @@ export const PlayerSeat: React.FC<{ player: Player; position: number; total: num
     <div
       data-player-seat-id={player.id}
       className={clsx(
-        "absolute left-1/2 top-1/2 flex flex-col items-center transition-transform duration-300 z-10 select-none pointer-events-auto",
+        "game-player-seat absolute left-1/2 top-1/2 flex flex-col items-center transition-transform duration-300 z-10 select-none pointer-events-auto",
         player.isDisconnected && "opacity-60"
       )}
       style={{
@@ -40,7 +40,7 @@ export const PlayerSeat: React.FC<{ player: Player; position: number; total: num
       }}
     >
       <div className={clsx(
-        "relative w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-sm sm:text-base font-black font-display border-2 border-ink rounded-lg transition-all",
+        "game-seat-avatar relative w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-sm sm:text-base font-black font-display border-2 border-ink rounded-lg transition-all",
         isTurn ? "bg-caution-yellow text-ink scale-110 shadow-[3px_3px_0_var(--color-ink)] ring-2 ring-evidence-red" :
         isWinner ? "bg-confirmed-green text-white shadow-[2px_2px_0_var(--color-ink)]" :
         "bg-surface text-ink shadow-[2px_2px_0_var(--color-ink)]"
@@ -52,7 +52,7 @@ export const PlayerSeat: React.FC<{ player: Player; position: number; total: num
           role="status"
         />
       </div>
-      <div className="mt-1 bg-surface border border-ink px-1.5 py-0.5 text-[10px] sm:text-[11px] font-bold font-mono text-ink uppercase shadow-[1px_1px_0_var(--color-ink)] max-w-[72px] sm:max-w-[100px] truncate rounded">
+      <div className="game-seat-name mt-1 bg-surface border border-ink px-1.5 py-0.5 text-[10px] sm:text-[11px] font-bold font-mono text-ink uppercase shadow-[1px_1px_0_var(--color-ink)] max-w-[72px] sm:max-w-[100px] truncate rounded">
         {player.name}
       </div>
       {isWinner ? (
@@ -60,7 +60,7 @@ export const PlayerSeat: React.FC<{ player: Player; position: number; total: num
           WINNER
         </div>
       ) : (
-        <div className="mt-0.5 flex gap-1 items-center bg-ink text-paper border border-ink px-1.5 py-0.5 text-[9px] shadow-[1px_1px_0_var(--color-ink)] rounded">
+        <div className="game-seat-cards mt-0.5 flex gap-1 items-center bg-ink text-paper border border-ink px-1.5 py-0.5 text-[9px] shadow-[1px_1px_0_var(--color-ink)] rounded">
           <span className="font-mono font-bold">{handsCount[player.id] ?? player.handCount ?? 0}</span>
           <span className="text-[8px] tracking-wider uppercase font-bold text-ink-muted">CARDS</span>
         </div>

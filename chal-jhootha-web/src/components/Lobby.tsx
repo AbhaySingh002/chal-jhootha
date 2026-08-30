@@ -33,6 +33,7 @@ export const Lobby: React.FC = () => {
   const currentDeckCount = gameState?.deckCount || 1;
   const currentWinnerCount = gameState?.winnerCount || 1;
   const winnerCountLocked = gameState?.winnerCountLocked ?? false;
+  const rosterNeedsScroll = playerCount > 4;
   const isRegistered = session?.user?.isRegistered === true;
   const lastMatchNames = (gameState?.lastMatch?.winnerIds ?? []).map((winnerID) => gameState?.players.find((player) => player.id === winnerID)?.name || 'Unknown');
 
@@ -203,7 +204,7 @@ export const Lobby: React.FC = () => {
           )}
 
           {/* Seated List */}
-          <div className="lobby-roster-list p-4 sm:p-6">
+          <div className={`lobby-roster-list p-4 sm:p-6 ${rosterNeedsScroll ? 'lobby-roster-list--scroll' : ''}`}>
             <ul className="grid gap-2.5 sm:grid-cols-2">
               {gameState.players.map((player, index) => {
                 const isYou = player.id === playerId;
@@ -376,12 +377,12 @@ export const Lobby: React.FC = () => {
       {/* Friends Quick Invite Drawer / Modal */}
       {showFriendsDrawer && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
+          className="lobby-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) setShowFriendsDrawer(false);
           }}
         >
-          <div className="brutal-card w-full max-w-md p-5 sm:p-6 shadow-[6px_6px_0_var(--color-ink)]">
+          <div className="lobby-modal-dialog brutal-card w-full max-w-md p-5 sm:p-6 shadow-[6px_6px_0_var(--color-ink)]">
             <div className="mb-4 flex items-center justify-between border-b-2 border-ink pb-2">
               <h3 className="font-display text-xl uppercase">Invite Connected Friends</h3>
               <button
