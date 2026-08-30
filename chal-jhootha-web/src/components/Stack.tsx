@@ -9,9 +9,7 @@ export const Stack: React.FC = () => {
     ? gameState.players.find((player) => player.id === gameState.topPlay?.playerId)?.name
     : null;
   const topClaim = gameState?.topPlay?.claims.map((claim) => `${claim.count} × ${claim.rank}${claim.count === 1 ? '' : 's'}`).join(' + ');
-  const emptyClaimLabel = gameState?.claimedRank
-    ? `${gameState.claimedRank}s · 0 in stack`
-    : 'Fresh round · 0 in stack';
+  const emptyClaimLabel = '0 stack';
 
   if (!gameState || gameState.stackCount === 0) {
     return (

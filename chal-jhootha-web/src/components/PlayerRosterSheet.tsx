@@ -1,9 +1,6 @@
-import { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Crown, Trophy, UserPlus, Users, WifiOff, X } from 'lucide-react';
+import { Crown, Trophy, Users, WifiOff, X } from 'lucide-react';
 import type { Player } from 'shared';
-import { useSession } from '../lib/auth';
-import { createFriendRequest } from '../lib/profile';
 
 type PlayerRosterSheetProps = {
   open: boolean;
@@ -23,18 +20,6 @@ export function PlayerRosterSheet({
   handsCount,
 }: PlayerRosterSheetProps) {
   const reduceMotion = useReducedMotion();
-  const { data: session } = useSession();
-  const isRegistered = session?.user?.isRegistered === true;
-  const [friendStatus, setFriendStatus] = useState<Record<string, string>>({});
-
-  const handleAddFriend = async (targetUserId: string) => {
-    try {
-      await createFriendRequest(targetUserId);
-      setFriendStatus((prev) => ({ ...prev, [targetUserId]: 'Sent!' }));
-    } catch {
-      setFriendStatus((prev) => ({ ...prev, [targetUserId]: 'Failed' }));
-    }
-  };
 
   return (
     <AnimatePresence>
@@ -79,11 +64,6 @@ export function PlayerRosterSheet({
                 const isYou = player.id === playerId;
                 const isWinner = player.isWinner || player.role === 'winner_spectator';
                 const cardCount = handsCount[player.id] ?? player.handCount ?? 0;
-                const canAdd =
-                  isRegistered &&
-                  player.userId &&
-                  player.userId !== session?.user?.id;
-
                 return (
                   <li
                     key={player.id}
@@ -114,21 +94,6 @@ export function PlayerRosterSheet({
                       )}
                       {!isWinner && player.id === hostId && (
                         <Crown className="shrink-0 text-caution-yellow" size={18} strokeWidth={2.5} aria-label="Host" />
-                      )}
-                      {canAdd && (
-                        <button
-                          type="button"
-                          onClick={() => handleAddFriend(player.userId!)}
-                          className="brutal-btn brutal-btn-compact text-[10px] bg-surface text-ink hover:bg-caution-yellow"
-                        >
-                          {friendStatus[player.userId!] ? (
-                            friendStatus[player.userId!]
-                          ) : (
-                            <span className="flex items-center gap-1">
-                              <UserPlus size={12} /> Add
-                            </span>
-                          )}
-                        </button>
                       )}
                     </div>
                   </li>

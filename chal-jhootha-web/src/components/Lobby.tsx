@@ -9,11 +9,12 @@ import {
   Radio,
   Share2,
   Trophy,
+  UserPlus,
   WifiOff,
   X,
 } from 'lucide-react';
 import { useSession } from '../lib/auth';
-import { createRoomInvite, getFriendships, type Friendship } from '../lib/profile';
+import { createFriendRequest, createRoomInvite, getFriendships, type Friendship } from '../lib/profile';
 import { useGameStore } from '../state/gameStore';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -24,6 +25,7 @@ export const Lobby: React.FC = () => {
   const [showFriendsDrawer, setShowFriendsDrawer] = useState(false);
   const [friends, setFriends] = useState<Friendship[]>([]);
   const [friendActionMsg, setFriendActionMsg] = useState<string | null>(null);
+  const [friendRequestStatus, setFriendRequestStatus] = useState<Record<string, 'sent' | 'failed'>>({});
 
   const playerCount = gameState?.players.length ?? 0;
   const isHost = gameState?.hostId === playerId;
@@ -53,14 +55,46 @@ export const Lobby: React.FC = () => {
   if (!gameState || gameState.phase !== 'lobby') return null;
 
   const inviteUrl = `${window.location.origin}/room/${gameState.roomCode}`;
-  const copyLink = async () => {
+  const showMessage = (message: string) => {
+    setFriendActionMsg(message);
+    window.setTimeout(() => setFriendActionMsg(null), 3000);
+  };
+
+  const copyRoomCode = async () => {
     try {
-      await navigator.clipboard.writeText(inviteUrl);
+      await navigator.clipboard.writeText(gameState.roomCode);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
-      window.prompt('Copy room link:', inviteUrl);
+      window.prompt('Copy room code:', gameState.roomCode);
     }
+  };
+
+  const shareInviteLink = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'Join my Chal Jhootha room',
+          text: `Join my room with code ${gameState.roomCode}.`,
+          url: inviteUrl,
+        });
+        showMessage('Invite shared.');
+        return;
+      }
+      await navigator.clipboard.writeText(inviteUrl);
+      showMessage('Invite link copied for sharing.');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      window.prompt('Share this room link:', inviteUrl);
+    }
+  };
+
+  const openInviteOptions = () => {
+    if (isRegistered) {
+      setShowFriendsDrawer(true);
+      return;
+    }
+    void shareInviteLink();
   };
 
   const handleLeaveLobby = () => {
@@ -71,18 +105,27 @@ export const Lobby: React.FC = () => {
     try {
       if (!gameState) return;
       await createRoomInvite(gameState.roomCode, targetUserId);
-      setFriendActionMsg(`Live invite sent to ${playerName}!`);
-      setTimeout(() => setFriendActionMsg(null), 3000);
+      showMessage(`Live invite sent to ${playerName}!`);
     } catch {
-      setFriendActionMsg(`Could not send invite. They may be offline or in another room.`);
-      setTimeout(() => setFriendActionMsg(null), 3000);
+      showMessage('Could not send invite. They may be offline or in another room.');
+    }
+  };
+
+  const handleFriendRequest = async (targetUserId: string) => {
+    try {
+      await createFriendRequest(targetUserId);
+      setFriendRequestStatus((current) => ({ ...current, [targetUserId]: 'sent' }));
+      showMessage('Friend request sent.');
+    } catch {
+      setFriendRequestStatus((current) => ({ ...current, [targetUserId]: 'failed' }));
+      showMessage('Could not send that friend request.');
     }
   };
 
   return (
-    <div className="page-shell">
+    <div className="page-shell lobby-shell">
       {/* Top Header */}
-      <header className="page-container mb-6 flex items-center justify-between gap-3 sm:mb-8">
+      <header className="lobby-header page-container mb-6 flex items-center justify-between gap-3 sm:mb-8">
           <button
           type="button"
           onClick={handleLeaveLobby}
@@ -104,23 +147,14 @@ export const Lobby: React.FC = () => {
             </button>
           ) : null}
 
-        <div className="min-w-0 text-center">
-          <span className="block font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-ink-muted">
-            ROOM CODE
-          </span>
-          <span className="font-display text-2xl tracking-[0.1em] text-ink">
-            {gameState.roomCode}
-          </span>
-        </div>
-
         <ThemeToggle />
       </header>
 
-      <main className="page-container grid items-start gap-6 pb-12 lg:grid-cols-[minmax(0,1.25fr)_minmax(19rem,0.75fr)]">
+      <main className="lobby-main page-container grid items-start gap-6 pb-12 lg:grid-cols-[minmax(0,1.25fr)_minmax(19rem,0.75fr)]">
         {/* Main Seated Players Card */}
-        <section className="brutal-card overflow-hidden">
+        <section className="lobby-roster-card brutal-card overflow-hidden">
           {/* Card Header Banner */}
-          <div className="border-b-[3px] border-ink bg-ink p-4 text-paper sm:p-6">
+          <div className="lobby-roster-header border-b-[3px] border-ink bg-ink p-4 text-paper sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <span className="inline-block border border-caution-yellow bg-caution-yellow/20 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-caution-yellow">
@@ -131,24 +165,26 @@ export const Lobby: React.FC = () => {
                 </h1>
               </div>
 
-              <div className="flex items-center gap-2">
-                {isRegistered && (
-                  <button
-                    type="button"
-                    onClick={() => setShowFriendsDrawer(true)}
-                    className="brutal-btn brutal-btn-compact inline-flex items-center gap-1.5 bg-surface text-xs text-ink"
-                  >
-                    <Share2 size={14} strokeWidth={2.5} />
-                    <span>Invite Friends</span>
-                  </button>
-                )}
+              <div className="lobby-invite-controls" role="group" aria-label={`Invite players to room ${gameState.roomCode}`}>
+                <span className="lobby-room-code font-mono text-xs font-bold tracking-[0.16em] text-ink">
+                  {gameState.roomCode}
+                </span>
                 <button
                   type="button"
-                  onClick={() => void copyLink()}
-                  className="brutal-btn brutal-btn-compact inline-flex items-center gap-1.5 bg-caution-yellow text-xs text-ink"
+                  onClick={() => void copyRoomCode()}
+                  className="icon-btn h-11 w-11 rounded-none border-y-0 border-r-0 bg-caution-yellow text-ink shadow-none"
+                  aria-label={copied ? 'Room code copied' : `Copy room code ${gameState.roomCode}`}
+                  title={copied ? 'Room code copied' : 'Copy room code'}
                 >
                   {copied ? <Check size={14} strokeWidth={2.5} /> : <Copy size={14} strokeWidth={2.5} />}
-                  <span>{copied ? 'Copied' : 'Copy Invite'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={openInviteOptions}
+                  className="brutal-btn brutal-btn-compact inline-flex items-center gap-1.5 rounded-none border-y-0 border-r-0 bg-surface text-xs text-ink shadow-none"
+                >
+                  <Share2 size={15} strokeWidth={2.5} />
+                  <span>Invite</span>
                 </button>
               </div>
             </div>
@@ -167,10 +203,12 @@ export const Lobby: React.FC = () => {
           )}
 
           {/* Seated List */}
-          <div className="p-4 sm:p-6">
+          <div className="lobby-roster-list p-4 sm:p-6">
             <ul className="grid gap-2.5 sm:grid-cols-2">
               {gameState.players.map((player, index) => {
                 const isYou = player.id === playerId;
+                const targetUserId = player.userId && player.userId !== session?.user?.id ? player.userId : null;
+                const requestState = targetUserId ? friendRequestStatus[targetUserId] : undefined;
                 return (
                   <li
                     key={player.id}
@@ -198,6 +236,26 @@ export const Lobby: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {targetUserId && (
+                        <button
+                          type="button"
+                          disabled={!isRegistered || requestState === 'sent'}
+                          onClick={() => void handleFriendRequest(targetUserId)}
+                          className="icon-btn h-11 w-11 border-2 bg-surface text-ink disabled:opacity-45"
+                          aria-label={
+                            !isRegistered
+                              ? 'Sign in to add this player as a friend'
+                              : requestState === 'sent'
+                              ? 'Friend request sent'
+                              : requestState === 'failed'
+                              ? 'Retry friend request'
+                              : `Add ${player.name} as a friend`
+                          }
+                          title={!isRegistered ? 'Sign in to add friends' : requestState === 'sent' ? 'Friend request sent' : 'Add friend'}
+                        >
+                          {requestState === 'sent' ? <Check size={17} strokeWidth={2.5} /> : <UserPlus size={17} strokeWidth={2.5} />}
+                        </button>
+                      )}
                       {player.id === gameState.hostId && (
                         <Crown size={17} className="text-caution-yellow" strokeWidth={2.5} aria-label="Host" />
                       )}
@@ -213,9 +271,9 @@ export const Lobby: React.FC = () => {
         </section>
 
         {/* Sidebar Controls */}
-        <aside className="space-y-5">
-          <section className="brutal-card p-5 sm:p-6">
-            <div className="mb-4 flex items-center gap-2 border-b-2 border-ink pb-3">
+        <aside className="lobby-settings space-y-5">
+          <section className="lobby-settings-card brutal-card p-5 sm:p-6">
+            <div className="lobby-settings-heading mb-4 flex items-center gap-2 border-b-2 border-ink pb-3">
               <Layers className="text-evidence-red" size={20} strokeWidth={2.5} />
               <h2 className="font-display text-xl uppercase">Match Settings</h2>
             </div>
@@ -231,7 +289,7 @@ export const Lobby: React.FC = () => {
                 </p>
               </div>
             ) : isHost ? (
-              <div className="space-y-4">
+              <div className="lobby-config-fields space-y-4">
                 <div>
                   <label htmlFor="deck-count" className="mb-1 block font-mono text-xs font-bold uppercase tracking-wider">
                     Deck Count
@@ -325,11 +383,21 @@ export const Lobby: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowFriendsDrawer(false)}
-                className="icon-btn h-7 w-7"
+                className="icon-btn h-11 w-11"
+                aria-label="Close friend invitations"
               >
                 <X size={15} strokeWidth={2.5} />
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => void shareInviteLink()}
+              className="brutal-btn brutal-btn-compact mt-4 inline-flex items-center gap-1.5 bg-surface text-xs text-ink"
+            >
+              <Share2 size={14} strokeWidth={2.5} />
+              <span>Share room link</span>
+            </button>
 
             {friends.length === 0 ? (
               <div className="py-6 text-center">

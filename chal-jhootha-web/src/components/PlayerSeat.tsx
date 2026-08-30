@@ -15,19 +15,16 @@ export const PlayerSeat: React.FC<{ player: Player; position: number; total: num
   };
   const avatarMark = avatarMarks[player.avatarId || ''] || player.name.substring(0, 2).toUpperCase();
 
-  // Calculate arc position around the central pile (upper semicircle / stadium layout)
-  let angle = -Math.PI / 2; // Default 1 player: top center (-90deg)
-  if (total === 2) {
-    const angles = [-Math.PI * 0.75, -Math.PI * 0.25];
-    angle = angles[position] ?? -Math.PI / 2;
-  } else if (total > 2) {
-    const startAngle = -Math.PI * 0.92; // Left flank (~-165deg)
-    const endAngle = -Math.PI * 0.08;   // Right flank (~-15deg)
-    angle = startAngle + (position / (total - 1)) * (endAngle - startAngle);
-  }
-
-  const cosA = Math.cos(angle);
-  const sinA = Math.sin(angle);
+  // Fixed percentage slots avoid the previous viewport-sized transform that
+  // could place a seat beneath the game header on short phone screens.
+  const seatSlots: Record<number, Array<[number, number]>> = {
+    1: [[50, 20]],
+    2: [[26, 29], [74, 29]],
+    3: [[16, 40], [50, 20], [84, 40]],
+    4: [[12, 47], [34, 29], [66, 29], [88, 47]],
+    5: [[12, 51], [30, 37], [50, 20], [70, 37], [88, 51]],
+  };
+  const [left, top] = (seatSlots[Math.min(total, 5)]?.[position] ?? seatSlots[1][0]);
 
   return (
     <div
@@ -37,7 +34,9 @@ export const PlayerSeat: React.FC<{ player: Player; position: number; total: num
         player.isDisconnected && "opacity-60"
       )}
       style={{
-        transform: `translate(calc(-50% + (${cosA.toFixed(4)} * min(44vw, 260px))), calc(-50% + (${sinA.toFixed(4)} * max(125px, min(35vw, 155px)))))`
+        left: `${left}%`,
+        top: `${top}%`,
+        transform: 'translate(-50%, -50%)',
       }}
     >
       <div className={clsx(

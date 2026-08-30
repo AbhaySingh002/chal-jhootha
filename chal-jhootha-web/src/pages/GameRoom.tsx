@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import type { Card as PlayingCard, GameState } from 'shared';
-import { LogOut, Mic, MicOff, Radio, RotateCcw, UserPlus, Users, Volume2, VolumeX } from 'lucide-react';
+import { LogOut, Mic, MicOff, Radio, RotateCcw, SmilePlus, Volume2, VolumeX } from 'lucide-react';
 import { useLocation, useParams } from 'wouter';
 import { useSession } from '../lib/auth';
-import { createFriendRequest } from '../lib/profile';
 import { ActionBar } from '../components/ActionBar';
 import { BrutalistStamp } from '../components/BrutalistStamp';
 import { CardFlightLayer, type CardFlight, type FlightPoint } from '../components/CardFlightLayer';
@@ -110,16 +109,20 @@ const ActiveVoiceControls: React.FC<ActiveVoiceControlsProps> = ({ playerId, sen
 
   return (
     <>
-      <button type="button" onClick={toggleMic} className={`icon-btn ${voiceOn && !micMuted ? 'bg-confirmed-green text-white' : 'bg-surface text-ink-muted'}`} aria-label={!voiceOn ? 'Join voice chat' : micMuted ? 'Unmute microphone' : 'Mute microphone'} title={!voiceOn ? 'Join voice chat' : micMuted ? 'Unmute microphone' : 'Mute microphone'}>{!voiceOn || micMuted ? <MicOff size={19} strokeWidth={2.5} /> : <Mic size={19} strokeWidth={2.5} />}</button>
-      <button type="button" onClick={toggleSpeaker} className={`icon-btn ${voiceOn && !speakerMuted ? 'bg-caution-yellow text-ink' : 'bg-surface text-ink-muted'}`} aria-label={speakerMuted ? 'Unmute speakers' : 'Mute speakers'} title={speakerMuted ? 'Unmute speakers' : 'Mute speakers'}>{speakerMuted || !voiceOn ? <VolumeX size={19} strokeWidth={2.5} /> : <Volume2 size={19} strokeWidth={2.5} />}</button>
+      <button type="button" onClick={toggleMic} className="game-voice-hitbox" aria-label={!voiceOn ? 'Join voice chat' : micMuted ? 'Unmute microphone' : 'Mute microphone'} title={!voiceOn ? 'Join voice chat' : micMuted ? 'Unmute microphone' : 'Mute microphone'}>
+        <span className={`game-voice-control ${voiceOn && !micMuted ? 'bg-confirmed-green text-white' : 'bg-surface text-ink-muted'}`}>{!voiceOn || micMuted ? <MicOff size={16} strokeWidth={2.5} /> : <Mic size={16} strokeWidth={2.5} />}</span>
+      </button>
+      <button type="button" onClick={toggleSpeaker} className="game-voice-hitbox" aria-label={speakerMuted ? 'Unmute speakers' : 'Mute speakers'} title={speakerMuted ? 'Unmute speakers' : 'Mute speakers'}>
+        <span className={`game-voice-control ${voiceOn && !speakerMuted ? 'bg-caution-yellow text-ink' : 'bg-surface text-ink-muted'}`}>{speakerMuted || !voiceOn ? <VolumeX size={16} strokeWidth={2.5} /> : <Volume2 size={16} strokeWidth={2.5} />}</span>
+      </button>
     </>
   );
 };
 
 const DisabledVoiceControls: React.FC = () => (
   <>
-    <button type="button" disabled className="icon-btn bg-surface text-ink-muted disabled:cursor-not-allowed disabled:opacity-45" aria-label="Voice chat unavailable for rooms over eight players" title="Voice chat is disabled above eight players"><MicOff size={19} strokeWidth={2.5} /></button>
-    <button type="button" disabled className="icon-btn bg-surface text-ink-muted disabled:cursor-not-allowed disabled:opacity-45" aria-label="Voice chat unavailable for rooms over eight players" title="Voice chat is disabled above eight players"><VolumeX size={19} strokeWidth={2.5} /></button>
+    <button type="button" disabled className="game-voice-hitbox disabled:cursor-not-allowed disabled:opacity-45" aria-label="Voice chat unavailable for rooms over eight players" title="Voice chat is disabled above eight players"><span className="game-voice-control bg-surface text-ink-muted"><MicOff size={16} strokeWidth={2.5} /></span></button>
+    <button type="button" disabled className="game-voice-hitbox disabled:cursor-not-allowed disabled:opacity-45" aria-label="Voice chat unavailable for rooms over eight players" title="Voice chat is disabled above eight players"><span className="game-voice-control bg-surface text-ink-muted"><VolumeX size={16} strokeWidth={2.5} /></span></button>
   </>
 );
 
@@ -137,6 +140,7 @@ export const GameRoom: React.FC = () => {
   const [connectionTimeout, setConnectionTimeout] = useState(false);
   const [voiceError, setVoiceError] = useState('');
   const [reactions, setReactions] = useState<TableReaction[]>([]);
+  const [reactionsOpen, setReactionsOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
   const [flights, setFlights] = useState<CardFlight[]>([]);
   const [concealedCardIds, setConcealedCardIds] = useState<string[]>([]);
@@ -416,18 +420,10 @@ export const GameRoom: React.FC = () => {
         ))}
       </div>
 
-      {/* ── Sticky top bar ── */}
-      <header className="game-topbar">
+      {/* ── Compact game controls ── */}
+      <header className="game-topbar game-topbar-compact">
         <button type="button" onClick={handleLeaveGame} className="icon-btn" aria-label="Leave room" title="Leave room"><LogOut size={19} strokeWidth={2.5} /></button>
-        <div className="min-w-0 text-center">
-          {gameState.claimedRank
-            ? <p className="truncate font-display text-base uppercase sm:text-lg">Claiming <span className="text-evidence-red">{gameState.claimedRank}s</span></p>
-            : <p className="truncate font-display text-base uppercase sm:text-lg">Fresh round</p>
-          }
-          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-ink-muted">{gameState.stackCount} cards on stack</p>
-        </div>
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <button type="button" onClick={() => setRosterOpen(true)} className="icon-btn" aria-label="Show all players" title="Show all players"><Users size={19} strokeWidth={2.5} /></button>
+        <div className="game-voice-controls">
           {voiceUnavailable ? <DisabledVoiceControls /> : <ActiveVoiceControls key={playerId ?? 'pending'} playerId={playerId} sendVoice={sendVoice} onVoiceError={setVoiceError} />}
         </div>
       </header>
@@ -438,8 +434,8 @@ export const GameRoom: React.FC = () => {
       {voiceUnavailable ? <p role="status" className="border-b-2 border-ink bg-surface-muted px-3 py-2 text-center font-mono text-xs font-bold uppercase text-ink-muted">Voice chat is disabled for rooms with more than 8 players.</p> : null}
 
       {/* ── Open table play area ── */}
-      <main className="table-area relative flex-1 w-full flex flex-col items-center justify-center min-h-[17rem] sm:min-h-[22rem] px-2 py-4 overflow-hidden select-none">
-        <div className="table-stage relative w-full max-w-2xl h-[17rem] sm:h-[20rem] md:h-[22rem] flex items-center justify-center">
+      <main className="table-area game-table-area relative flex-1 w-full min-h-0 px-2 py-3 select-none">
+        <div className="table-stage game-table-stage relative flex w-full max-w-2xl min-h-0 items-center justify-center">
           {/* Centered played-card pile */}
           <div className="z-10 flex flex-col items-center">
             <Stack />
@@ -468,8 +464,23 @@ export const GameRoom: React.FC = () => {
           </p>
         ) : null}
 
-        <div className="mt-3 flex max-w-full flex-wrap items-center justify-center gap-1.5" role="group" aria-label="Send a table reaction">
-          {REACTIONS.map((emoji) => <button key={emoji} type="button" onClick={() => sendTableReaction(emoji)} className="reaction-button" aria-label={`Send ${emoji} reaction`}>{emoji}</button>)}
+        <div className="reaction-dock">
+          {reactionsOpen ? (
+            <div id="table-reactions" className="reaction-panel" role="group" aria-label="Send a table reaction">
+              {REACTIONS.map((emoji) => <button key={emoji} type="button" onClick={() => sendTableReaction(emoji)} className="reaction-button" aria-label={`Send ${emoji} reaction`}>{emoji}</button>)}
+            </div>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setReactionsOpen((open) => !open)}
+            className="reaction-toggle"
+            aria-expanded={reactionsOpen}
+            aria-controls="table-reactions"
+            aria-label={reactionsOpen ? 'Hide table reactions' : 'Show table reactions'}
+          >
+            <SmilePlus size={19} strokeWidth={2.5} />
+            <span className="hidden sm:inline">Reactions</span>
+          </button>
         </div>
       </main>
 
@@ -498,8 +509,6 @@ export const GameRoom: React.FC = () => {
               {gameState.players.map((player) => {
                 const isWin = player.isWinner || (gameState.winners?.includes(player.id));
                 const isYou = player.id === playerId;
-                const canAdd = session?.user?.isRegistered && player.userId && player.userId !== session?.user?.id;
-
                 return (
                   <div
                     key={player.id}
@@ -521,31 +530,11 @@ export const GameRoom: React.FC = () => {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {isWin && (
-                        <span className="border border-ink bg-confirmed-green px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-white">
-                          Winner
-                        </span>
-                      )}
-                      {canAdd && (
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            try {
-                              await createFriendRequest(player.userId!);
-                              alert(`Friend request sent to ${player.name}!`);
-                            } catch {
-                              alert(`Could not send friend request.`);
-                            }
-                          }}
-                          className="brutal-btn brutal-btn-compact text-[10px] bg-surface text-ink hover:bg-caution-yellow"
-                          title="Add Friend"
-                        >
-                          <UserPlus size={12} className="inline mr-1" />
-                          Add
-                        </button>
-                      )}
-                    </div>
+                    {isWin && (
+                      <span className="border border-ink bg-confirmed-green px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-white">
+                        Winner
+                      </span>
+                    )}
                   </div>
                 );
               })}

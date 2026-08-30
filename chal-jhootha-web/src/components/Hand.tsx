@@ -106,7 +106,7 @@ export const Hand: React.FC<{ selectedCards: string[]; onSelect: (id: string) =>
   const cardWidth = isMobile ? 72 : 96;
 
   return (
-    <section data-hand-anchor aria-label="Your hand" className="w-full max-w-[100vw] border-t-2 border-ink/20 bg-paper/90 backdrop-blur-sm px-2 pb-3 pt-2 sm:px-4 select-none">
+    <section data-hand-anchor aria-label="Your hand" className="game-hand w-full max-w-[100vw] border-t-2 border-ink/20 bg-paper/90 backdrop-blur-sm px-2 pb-3 pt-2 sm:px-4 select-none">
       <div className="mb-1 flex items-center justify-between gap-3 px-2 font-mono text-xs font-bold uppercase tracking-[0.1em] text-ink-muted">
         <span className="flex items-center gap-1.5">
           <HandIcon size={15} strokeWidth={2.5} className="text-evidence-red" />
@@ -119,6 +119,7 @@ export const Hand: React.FC<{ selectedCards: string[]; onSelect: (id: string) =>
 
       {/* Fanned Arc Bounded Scroll Container */}
       <div
+        data-hand-scroll
         ref={scrollContainerRef}
         onScroll={handleScroll}
         onPointerDown={handlePointerDown}

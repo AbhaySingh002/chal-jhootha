@@ -4,6 +4,7 @@ import {
   Check,
   Flame,
   LogIn,
+  LogOut,
   Search,
   Shield,
   Trophy,
@@ -11,7 +12,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useSession } from '../lib/auth';
+import { signOut, useSession } from '../lib/auth';
 import {
   createFriendRequest,
   createMyProfile,
@@ -195,6 +196,11 @@ export const Profile: React.FC = () => {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to remove friend.');
     }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    setLocation('/');
   };
 
   if (isPending || (isRegistered && isLoading)) {
@@ -719,6 +725,18 @@ export const Profile: React.FC = () => {
             </section>
           </div>
         )}
+
+        <section className="profile-signout mt-10 border-t-2 border-ink/20 pt-6 text-center">
+          <p className="font-mono text-xs text-ink-muted">Finished managing your player account?</p>
+          <button
+            type="button"
+            onClick={() => void handleSignOut()}
+            className="brutal-btn brutal-btn-compact mt-3 inline-flex items-center gap-1.5 bg-evidence-red text-xs text-white"
+          >
+            <LogOut size={15} strokeWidth={2.5} />
+            <span>Sign Out</span>
+          </button>
+        </section>
       </main>
     </div>
   );

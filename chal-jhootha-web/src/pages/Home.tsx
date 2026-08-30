@@ -74,30 +74,30 @@ export const Home: React.FC = () => {
   };
 
   return (
-    <div className="page-shell">
+    <div className="page-shell home-shell">
       <Navbar currentTab="play" />
 
-      <main id="main-content" className="page-container grid items-start gap-6 pb-12 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,28rem)] lg:gap-12 lg:pt-4">
+      <main id="main-content" className="home-main page-container grid items-start gap-6 pb-12 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,28rem)] lg:gap-12 lg:pt-4">
         {/* Left Hero Section */}
         <motion.section
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          className="min-w-0 pt-2 lg:pt-6"
+          className="home-hero min-w-0 pt-2 lg:pt-6"
         >
-          <div className="mb-3 inline-flex items-center gap-1.5 rounded-md border-2 border-ink bg-evidence-red px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[2px_2px_0_var(--color-ink)]">
+          <div className="home-protocol mb-3 inline-flex items-center gap-1.5 rounded-md border-2 border-ink bg-evidence-red px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[2px_2px_0_var(--color-ink)]">
             <span>OFFICIAL BLUFF PROTOCOL</span>
           </div>
 
-          <h1 className="font-display text-[clamp(2.5rem,8.5vw,5.5rem)] leading-[0.88] tracking-[-0.05em] text-ink">
-            CHAL<br />JHOOTHA
+          <h1 className="home-title font-display text-[clamp(2.5rem,8.5vw,5.5rem)] leading-[0.88] tracking-[-0.05em] text-ink">
+            <span lang="hi" className="hero-hindi">चल</span><br />JHOOTHA
           </h1>
 
-          <p className="mt-4 max-w-md border-l-[3px] border-ink pl-3.5 font-mono text-sm font-semibold leading-relaxed text-ink-muted sm:text-base">
+          <p className="home-description mt-4 max-w-md border-l-[3px] border-ink pl-3.5 font-mono text-sm font-semibold leading-relaxed text-ink-muted sm:text-base">
             Call bluffs, disguise plays, and empty your hand before you get caught.
           </p>
 
-          <div className="mt-6 flex flex-wrap items-center gap-3 font-mono text-xs font-bold uppercase text-ink-muted">
+          <div className="home-badges mt-6 flex flex-wrap items-center gap-3 font-mono text-xs font-bold uppercase text-ink-muted">
             <div className="flex items-center gap-2 rounded-lg border border-ink/20 bg-surface px-3 py-1.5 shadow-[2px_2px_0_var(--color-ink)]">
               <Users size={15} className="text-evidence-red" strokeWidth={2.5} />
               <span>2+ PLAYERS</span>
@@ -114,7 +114,7 @@ export const Home: React.FC = () => {
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
-          className="brutal-card w-full p-5 sm:p-7"
+          className="home-match brutal-card w-full p-5 sm:p-7"
           aria-labelledby="match-hub-title"
         >
           <div className="mb-5 border-b-2 border-ink pb-3.5">
