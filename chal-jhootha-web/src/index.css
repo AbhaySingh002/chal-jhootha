@@ -390,31 +390,21 @@
     animation: hero-dealer-pip 7.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
   }
 
-  .lobby-invite-controls {
+  .lobby-action-group {
     display: inline-flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.5rem;
-    background: transparent;
   }
 
-  .lobby-room-code-chip {
+  .lobby-code-badge {
     display: inline-flex;
-    min-height: 42px;
+    min-height: 40px;
     align-items: center;
     justify-content: center;
     border: 2px solid var(--color-ink);
     border-radius: 0.5rem;
     background: var(--color-surface);
-    padding-inline: 0.85rem;
-    box-shadow: 2px 2px 0 var(--color-ink);
-  }
-
-  .lobby-invite-controls .icon-btn,
-  .lobby-invite-controls .brutal-btn {
-    min-height: 42px;
-    border: 2px solid var(--color-ink);
-    border-radius: 0.5rem;
     box-shadow: 2px 2px 0 var(--color-ink);
   }
 }
@@ -559,11 +549,8 @@
     gap: 0.75rem;
   }
   .lobby-roster-header h1 { font-size: 1.35rem; }
-  .lobby-roster-header .lobby-invite-controls { max-width: 100%; gap: 0.4rem; }
-  .lobby-room-code-chip { min-height: 38px; padding-inline: 0.65rem; }
-  .lobby-invite-controls .icon-btn,
-  .lobby-invite-controls .brutal-btn { min-height: 38px; }
-  .lobby-invite-controls .brutal-btn { padding-inline: 0.65rem; }
+  .lobby-roster-header .lobby-action-group { max-width: 100%; gap: 0.4rem; }
+  .lobby-code-badge { min-height: 38px; }
 
   .lobby-roster-list {
     min-height: 0;
@@ -616,27 +603,25 @@
 
 .reaction-button {
   display: inline-flex;
-  width: 2.65rem;
-  height: 2.65rem;
+  width: 2.75rem;
+  height: 2.75rem;
   align-items: center;
   justify-content: center;
   border: 2px solid var(--color-ink);
   border-radius: 0.5rem;
   background: var(--color-paper);
   box-shadow: 2px 2px 0 var(--color-ink);
-  font-size: 1.25rem;
+  font-size: 1.2rem;
   line-height: 1;
-  cursor: pointer;
-  user-select: none;
   transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
-.reaction-button:hover { background: var(--color-caution-yellow); transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--color-ink); }
+.reaction-button:hover { background: var(--color-caution-yellow); }
 .reaction-button:active { box-shadow: 0 0 0 var(--color-ink); transform: translate(2px, 2px); }
 
 .reaction-dock {
   position: absolute;
-  z-index: 20;
+  z-index: 25;
   right: 0.5rem;
   bottom: 0.35rem;
   left: 0.5rem;
@@ -651,14 +636,15 @@
 
 .reaction-panel {
   display: grid;
-  grid-template-columns: repeat(4, 2.65rem);
+  grid-template-columns: repeat(4, 2.75rem);
   gap: 0.4rem;
   justify-content: center;
   border: 2px solid var(--color-ink);
-  border-radius: 0.75rem;
+  border-radius: 0.625rem;
   background: var(--color-surface);
-  padding: 0.5rem;
+  padding: 0.45rem;
   box-shadow: 3px 3px 0 var(--color-ink);
+  margin-bottom: 0.15rem;
 }
 
 .reaction-toggle {
@@ -670,15 +656,16 @@
   border: 2px solid var(--color-ink);
   border-radius: 0.5rem;
   background: var(--color-surface);
-  padding-inline: 0.65rem;
+  padding: 0.35rem 0.75rem;
   box-shadow: 2px 2px 0 var(--color-ink);
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  cursor: pointer;
+  color: var(--color-ink);
   transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  cursor: pointer;
 }
 
 .reaction-toggle:hover { background: var(--color-caution-yellow); }

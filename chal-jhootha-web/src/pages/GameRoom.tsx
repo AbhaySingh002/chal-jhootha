@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import type { Card as PlayingCard, GameState } from 'shared';
-import { ChevronDown, ChevronUp, LogOut, Mic, MicOff, Radio, RotateCcw, SmilePlus, Volume2, VolumeX } from 'lucide-react';
+import { ChevronUp, LogOut, Mic, MicOff, Radio, RotateCcw, SmilePlus, Volume2, VolumeX } from 'lucide-react';
 import { useLocation, useParams } from 'wouter';
 import { useSession } from '../lib/auth';
 import { ActionBar } from '../components/ActionBar';
@@ -144,23 +144,23 @@ export const GameRoom: React.FC = () => {
   const [rosterOpen, setRosterOpen] = useState(false);
   const [flights, setFlights] = useState<CardFlight[]>([]);
   const [concealedCardIds, setConcealedCardIds] = useState<string[]>([]);
-  const reactionDockRef = useRef<HTMLDivElement>(null);
   const hasAttemptedJoin = useRef(false);
   const animationSnapshotRef = useRef<AnimationSnapshot | null>(null);
   const pendingPickupRef = useRef<PendingPickup | null>(null);
   const processedChallengeSeqsRef = useRef(new Set<number>());
   const flightSequenceRef = useRef(0);
+  const reactionDockRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     if (!reactionsOpen) return;
-    const handleOutsideClick = (e: PointerEvent) => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       if (reactionDockRef.current && !reactionDockRef.current.contains(e.target as Node)) {
         setReactionsOpen(false);
       }
     };
-    document.addEventListener('pointerdown', handleOutsideClick);
-    return () => document.removeEventListener('pointerdown', handleOutsideClick);
+    document.addEventListener('pointerdown', handleClickOutside);
+    return () => document.removeEventListener('pointerdown', handleClickOutside);
   }, [reactionsOpen]);
 
   const storedToken = typeof window !== 'undefined' ? sessionStorage.getItem('rejoinToken') : null;
@@ -481,22 +481,25 @@ export const GameRoom: React.FC = () => {
 
         <div ref={reactionDockRef} className="reaction-dock">
           <AnimatePresence>
-            {reactionsOpen && (
+            {reactionsOpen ? (
               <motion.div
                 id="table-reactions"
                 className="reaction-panel"
                 role="group"
                 aria-label="Send a table reaction"
-                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.94 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 8, scale: 0.94 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.94 }}
-                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                exit={reduceMotion ? undefined : { opacity: 0, y: 6, scale: 0.94 }}
+                transition={{ type: 'spring', stiffness: 450, damping: 28 }}
               >
                 {REACTIONS.map((emoji) => (
                   <button
                     key={emoji}
                     type="button"
-                    onClick={() => sendTableReaction(emoji)}
+                    onClick={() => {
+                      sendTableReaction(emoji);
+                      setReactionsOpen(false);
+                    }}
                     className="reaction-button"
                     aria-label={`Send ${emoji} reaction`}
                   >
@@ -504,23 +507,23 @@ export const GameRoom: React.FC = () => {
                   </button>
                 ))}
               </motion.div>
-            )}
+            ) : null}
           </AnimatePresence>
           <button
             type="button"
             onClick={() => setReactionsOpen((open) => !open)}
-            className="reaction-toggle inline-flex items-center gap-1.5"
+            className={`reaction-toggle ${reactionsOpen ? 'bg-caution-yellow text-ink' : 'bg-surface text-ink'}`}
             aria-expanded={reactionsOpen}
             aria-controls="table-reactions"
             aria-label={reactionsOpen ? 'Hide table reactions' : 'Show table reactions'}
           >
-            <SmilePlus size={16} strokeWidth={2.5} className="text-evidence-red" />
-            <span className="text-[11px] sm:text-xs">Reactions</span>
-            {reactionsOpen ? (
-              <ChevronDown size={14} strokeWidth={2.5} className="text-ink-muted" />
-            ) : (
-              <ChevronUp size={14} strokeWidth={2.5} className="text-ink-muted" />
-            )}
+            <SmilePlus size={16} strokeWidth={2.5} />
+            <span>Reactions</span>
+            <ChevronUp
+              size={14}
+              strokeWidth={2.5}
+              className={`transition-transform duration-200 ${reactionsOpen ? 'rotate-180' : ''}`}
+            />
           </button>
         </div>
       </main>

@@ -166,27 +166,31 @@ export const Lobby: React.FC = () => {
                 </h1>
               </div>
 
-              <div className="lobby-invite-controls flex flex-wrap items-center gap-2 sm:gap-2.5" role="group" aria-label={`Invite players to room ${gameState.roomCode}`}>
-                <div className="lobby-room-code-chip" title="Room code">
-                  <span className="font-mono text-xs font-bold tracking-[0.18em] text-ink select-all">
-                    {gameState.roomCode}
-                  </span>
+              <div className="lobby-action-group flex flex-wrap items-center gap-2 sm:gap-2.5" role="group" aria-label={`Invite players to room ${gameState.roomCode}`}>
+                <div
+                  className="lobby-code-badge flex h-10 sm:h-11 items-center justify-center gap-1.5 rounded-lg border-2 border-ink bg-surface px-3 font-mono shadow-[2px_2px_0_var(--color-ink)]"
+                  title="Room Code"
+                >
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">Code</span>
+                  <span className="text-xs sm:text-sm font-black tracking-[0.18em] text-ink">{gameState.roomCode}</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => void copyRoomCode()}
-                  className="icon-btn h-10 w-10 sm:h-11 sm:w-11 rounded-lg border-2 border-ink bg-caution-yellow text-ink shadow-[2px_2px_0_var(--color-ink)] transition-all hover:bg-caution-yellow/90 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+                  className="brutal-btn brutal-btn-compact inline-flex h-10 sm:h-11 items-center gap-1.5 rounded-lg border-2 border-ink bg-caution-yellow px-3 text-xs font-bold uppercase tracking-wider text-ink shadow-[2px_2px_0_var(--color-ink)] transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
                   aria-label={copied ? 'Room code copied' : `Copy room code ${gameState.roomCode}`}
                   title={copied ? 'Room code copied' : 'Copy room code'}
                 >
-                  {copied ? <Check size={16} strokeWidth={2.5} /> : <Copy size={16} strokeWidth={2.5} />}
+                  {copied ? <Check size={14} strokeWidth={2.5} className="text-confirmed-green" /> : <Copy size={14} strokeWidth={2.5} />}
+                  <span>{copied ? 'Copied' : 'Copy'}</span>
                 </button>
                 <button
                   type="button"
                   onClick={openInviteOptions}
-                  className="brutal-btn brutal-btn-compact h-10 sm:h-11 inline-flex items-center gap-1.5 rounded-lg border-2 border-ink bg-surface px-3.5 text-xs text-ink shadow-[2px_2px_0_var(--color-ink)] transition-all hover:bg-paper active:translate-x-[1px] active:translate-y-[1px] active:shadow-none font-display uppercase tracking-wide"
+                  className="brutal-btn brutal-btn-compact inline-flex h-10 sm:h-11 items-center gap-1.5 rounded-lg border-2 border-ink bg-surface px-3.5 text-xs font-bold uppercase tracking-wider text-ink shadow-[2px_2px_0_var(--color-ink)] transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+                  aria-label="Invite players"
                 >
-                  <Share2 size={15} strokeWidth={2.5} />
+                  <Share2 size={14} strokeWidth={2.5} />
                   <span>Invite</span>
                 </button>
               </div>
