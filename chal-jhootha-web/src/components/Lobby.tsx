@@ -9,24 +9,21 @@ import {
   Radio,
   Share2,
   Trophy,
-  UserPlus,
   WifiOff,
   X,
 } from 'lucide-react';
-import { useLocation } from 'wouter';
 import { useSession } from '../lib/auth';
-import { createFriendRequest, getFriendships, type Friendship } from '../lib/profile';
+import { createRoomInvite, getFriendships, type Friendship } from '../lib/profile';
 import { useGameStore } from '../state/gameStore';
 import { ThemeToggle } from './ThemeToggle';
 
 export const Lobby: React.FC = () => {
-  const { gameState, playerId, startGame, setConfig, resetSession } = useGameStore();
+  const { gameState, playerId, startGame, setConfig, leaveRoom, destroyRoom } = useGameStore();
   const { data: session } = useSession();
   const [copied, setCopied] = useState(false);
   const [showFriendsDrawer, setShowFriendsDrawer] = useState(false);
   const [friends, setFriends] = useState<Friendship[]>([]);
   const [friendActionMsg, setFriendActionMsg] = useState<string | null>(null);
-  const [, setLocation] = useLocation();
 
   const playerCount = gameState?.players.length ?? 0;
   const isHost = gameState?.hostId === playerId;
@@ -35,6 +32,7 @@ export const Lobby: React.FC = () => {
   const currentWinnerCount = gameState?.winnerCount || 1;
   const winnerCountLocked = gameState?.winnerCountLocked ?? false;
   const isRegistered = session?.user?.isRegistered === true;
+  const lastMatchNames = (gameState?.lastMatch?.winnerIds ?? []).map((winnerID) => gameState?.players.find((player) => player.id === winnerID)?.name || 'Unknown');
 
   useEffect(() => {
     if (!winnerCountLocked && isHost && playerCount >= 2 && currentWinnerCount > maxWinners) {
@@ -66,17 +64,17 @@ export const Lobby: React.FC = () => {
   };
 
   const handleLeaveLobby = () => {
-    resetSession();
-    setLocation('/');
+    leaveRoom();
   };
 
-  const handleAddFriend = async (targetUserId: string, playerName: string) => {
+  const handleInviteFriend = async (targetUserId: string, playerName: string) => {
     try {
-      await createFriendRequest(targetUserId);
-      setFriendActionMsg(`Friend request sent to ${playerName}!`);
+      if (!gameState) return;
+      await createRoomInvite(gameState.roomCode, targetUserId);
+      setFriendActionMsg(`Live invite sent to ${playerName}!`);
       setTimeout(() => setFriendActionMsg(null), 3000);
     } catch {
-      setFriendActionMsg(`Could not send request.`);
+      setFriendActionMsg(`Could not send invite. They may be offline or in another room.`);
       setTimeout(() => setFriendActionMsg(null), 3000);
     }
   };
@@ -85,14 +83,26 @@ export const Lobby: React.FC = () => {
     <div className="page-shell">
       {/* Top Header */}
       <header className="page-container mb-6 flex items-center justify-between gap-3 sm:mb-8">
-        <button
+          <button
           type="button"
           onClick={handleLeaveLobby}
           className="brutal-btn brutal-btn-compact inline-flex items-center gap-1.5 bg-surface text-xs text-ink"
         >
           <ArrowLeft size={15} strokeWidth={2.5} />
           <span>Exit Room</span>
-        </button>
+          </button>
+
+          {isHost ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Destroy this room for every player?')) destroyRoom();
+              }}
+              className="brutal-btn brutal-btn-compact bg-evidence-red text-xs text-white"
+            >
+              Destroy
+            </button>
+          ) : null}
 
         <div className="min-w-0 text-center">
           <span className="block font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-ink-muted">
@@ -150,16 +160,17 @@ export const Lobby: React.FC = () => {
             </div>
           )}
 
+          {lastMatchNames.length > 0 && (
+            <div className="border-b-2 border-ink bg-caution-yellow/25 px-4 py-2 text-center font-mono text-xs font-bold uppercase sm:px-6">
+              Last match · {lastMatchNames.join(', ')} {lastMatchNames.length === 1 ? 'won' : 'placed'}
+            </div>
+          )}
+
           {/* Seated List */}
           <div className="p-4 sm:p-6">
             <ul className="grid gap-2.5 sm:grid-cols-2">
               {gameState.players.map((player, index) => {
                 const isYou = player.id === playerId;
-                const canAddFriend =
-                  isRegistered &&
-                  player.userId &&
-                  player.userId !== session?.user?.id;
-
                 return (
                   <li
                     key={player.id}
@@ -192,16 +203,6 @@ export const Lobby: React.FC = () => {
                       )}
                       {player.isDisconnected && (
                         <WifiOff size={16} className="text-evidence-red" strokeWidth={2.5} aria-label="Away" />
-                      )}
-                      {canAddFriend && (
-                        <button
-                          type="button"
-                          onClick={() => handleAddFriend(player.userId!, player.name)}
-                          className="icon-btn h-7 w-7 bg-surface text-ink"
-                          title="Add Friend"
-                        >
-                          <UserPlus size={13} strokeWidth={2.5} />
-                        </button>
                       )}
                     </div>
                   </li>
@@ -344,19 +345,17 @@ export const Lobby: React.FC = () => {
                     key={f.id}
                     className="flex items-center justify-between border border-ink bg-paper p-2.5 font-mono text-xs font-bold"
                   >
-                    <span>@{f.profile.handle}</span>
+                    <span className="flex min-w-0 items-center gap-1.5 truncate">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${f.online ? 'bg-confirmed-green' : 'bg-ink/25'}`} aria-label={f.online ? 'Online' : 'Offline'} />
+                      @{f.profile.handle}
+                    </span>
                     <button
                       type="button"
-                      onClick={async () => {
-                        await navigator.clipboard.writeText(
-                          `Hey! Join my Chal Jhootha game with code: ${gameState.roomCode}\n${inviteUrl}`
-                        );
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 2000);
-                      }}
-                      className="brutal-btn brutal-btn-compact text-[10px] bg-caution-yellow text-ink"
+                      disabled={!f.online}
+                      onClick={() => void handleInviteFriend(f.profile.userId, f.profile.displayName)}
+                      className="brutal-btn brutal-btn-compact text-[10px] bg-caution-yellow text-ink disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {copied ? 'Copied Link' : 'Copy Room Invite'}
+                      {f.online ? 'Invite' : 'Offline'}
                     </button>
                   </li>
                 ))}

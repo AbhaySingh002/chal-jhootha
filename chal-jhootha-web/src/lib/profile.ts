@@ -6,6 +6,7 @@ export interface PlayerProfile {
   displayName: string;
   gamesPlayed: number;
   gamesWon: number;
+  avatarId: string;
 }
 
 export interface Friendship {
@@ -13,6 +14,16 @@ export interface Friendship {
   status: 'pending' | 'accepted';
   direction: 'friend' | 'incoming' | 'outgoing';
   profile: PlayerProfile;
+  online?: boolean;
+}
+
+export interface RoomInvite {
+  token: string;
+  roomCode: string;
+  hostId: string;
+  hostName: string;
+  recipientId: string;
+  expiresAt: string;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -44,10 +55,17 @@ export function createMyProfile(handle: string) {
   });
 }
 
-export function updateMyProfile(handle: string, displayName: string) {
+export function updateMyProfile(handle: string, displayName: string, avatarId: string) {
   return request<{ profile: PlayerProfile }>('/api/profile/me', {
     method: 'PATCH',
-    body: JSON.stringify({ handle, displayName }),
+    body: JSON.stringify({ handle, displayName, avatarId }),
+  });
+}
+
+export function updateMyPassword(currentPassword: string, newPassword: string) {
+  return request<{ ok: boolean }>('/api/profile/me/password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
   });
 }
 
@@ -78,5 +96,22 @@ export function respondToFriendRequest(id: string, accept: boolean) {
 
 export function removeFriendship(id: string) {
   return request<void>(`/api/friends/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export function getRoomInvites() {
+  return request<{ invites: RoomInvite[] }>('/api/room-invites');
+}
+
+export function createRoomInvite(roomCode: string, targetUserId: string) {
+  return request<{ invite: RoomInvite }>('/api/room-invites', {
+    method: 'POST',
+    body: JSON.stringify({ roomCode, targetUserId }),
+  });
+}
+
+export function respondToRoomInvite(token: string, accept: boolean) {
+  return request<{ roomCode?: string }>(`/api/room-invites/${encodeURIComponent(token)}/${accept ? 'accept' : 'decline'}`, {
+    method: 'POST',
+  });
 }
 import { apiURL } from './api';

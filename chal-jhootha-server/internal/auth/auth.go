@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha1"
@@ -16,7 +17,9 @@ import (
 	"sync"
 	"time"
 
+	"chal-jhootha-server/internal/live"
 	"chal-jhootha-server/internal/logger"
+	"chal-jhootha-server/internal/room"
 	"chal-jhootha-server/internal/store"
 
 	"github.com/google/uuid"
@@ -31,7 +34,16 @@ const (
 )
 
 type Service struct {
-	Store *store.Store
+	Store   *store.Store
+	Runtime *live.Runtime
+	Rooms   *room.Manager
+}
+
+func (s *Service) MarkOnline(ctx context.Context, user *store.User) {
+	if s.Runtime == nil || user == nil || !user.IsRegistered {
+		return
+	}
+	_ = s.Runtime.SetPresence(ctx, user.ID, 45*time.Second)
 }
 
 type wsTicketEntry struct {
@@ -65,6 +77,16 @@ func deleteMemoryTicketsForUser(userID string) {
 	})
 }
 
+func deleteMemorySessionsForUser(userID string) {
+	memSessions.Range(func(key, value any) bool {
+		entry, ok := value.(sessionEntry)
+		if ok && entry.user != nil && entry.user.ID == userID {
+			memSessions.Delete(key)
+		}
+		return true
+	})
+}
+
 type User struct {
 	ID           string `json:"id"`
 	Email        string `json:"email,omitempty"`
@@ -72,6 +94,7 @@ type User struct {
 	IsRegistered bool   `json:"isRegistered"`
 	Handle       string `json:"handle,omitempty"`
 	HasProfile   bool   `json:"hasProfile"`
+	AvatarID     string `json:"avatarId,omitempty"`
 }
 
 var handlePattern = regexp.MustCompile(`^[a-z0-9_]{3,16}$`)
@@ -283,6 +306,7 @@ func (s *Service) publicUser(u *store.User) User {
 		if profile, err := s.Store.GetProfile(u.ID); err == nil {
 			out.Handle = profile.Handle
 			out.HasProfile = true
+			out.AvatarID = profile.AvatarID
 		}
 	}
 	return out
@@ -362,21 +386,27 @@ func (s *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) HandleGuest(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name     string `json:"name"`
+		ForceNew bool   `json:"forceNew"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
 	if u, _, ok := s.UserFromRequest(r); ok {
 		room := ""
 		if !u.IsEphemeralGuest {
 			room, _, _ = s.Store.GetUserRoom(u.ID)
+			writeJSON(w, 200, map[string]any{"user": s.publicUser(u), "activeRoomCode": room})
+			return
 		}
-		writeJSON(w, 200, map[string]any{"user": s.publicUser(u), "activeRoomCode": room})
-		return
+		if !body.ForceNew {
+			writeJSON(w, 200, map[string]any{"user": s.publicUser(u), "activeRoomCode": room})
+			return
+		}
 	}
-	var body struct {
-		Name string `json:"name"`
-	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
 	name := strings.TrimSpace(body.Name)
 	if name == "" {
-		name = "GUEST"
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "a guest alias is required"})
+		return
 	}
 	if len(name) > 16 {
 		name = name[:16]
@@ -390,6 +420,16 @@ func (s *Service) HandleGuest(w http.ResponseWriter, r *http.Request) {
 	s.setCookie(w, token, GuestSessionTTL)
 	logger.Info("AUTH", "Guest session created", "userId", id)
 	writeJSON(w, 201, map[string]any{"user": s.publicUser(&store.User{ID: id, DisplayName: name, IsEphemeralGuest: true})})
+}
+
+// HandleClearGuest removes only an ephemeral browser identity. Registered
+// sessions are intentionally untouched, so leaving a room never signs a
+// player out of their account.
+func (s *Service) HandleClearGuest(w http.ResponseWriter, r *http.Request) {
+	if u, _, ok := s.UserFromRequest(r); ok && u.IsEphemeralGuest {
+		s.clearCookie(w)
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (s *Service) HandleLogout(w http.ResponseWriter, r *http.Request) {

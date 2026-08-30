@@ -151,12 +151,12 @@
 
   .brutal-btn:active:not(:disabled) { box-shadow: 1px 1px 0 var(--color-ink); transform: translate(2px, 2px); }
   .brutal-btn:disabled { box-shadow: none; opacity: 0.45; }
-  .brutal-btn-compact { min-height: 40px; padding: 0.5rem 0.75rem; font-size: 0.75rem; border-radius: 0.5rem; }
+  .brutal-btn-compact { min-height: 44px; padding: 0.5rem 0.75rem; font-size: 0.75rem; border-radius: 0.5rem; }
 
   .icon-btn {
     display: inline-flex;
-    width: 42px;
-    height: 42px;
+    width: 44px;
+    height: 44px;
     align-items: center;
     justify-content: center;
     border: 2.5px solid var(--color-ink);
@@ -199,6 +199,23 @@
   .bottom-bar { padding-inline: max(1rem, env(safe-area-inset-right)); }
 }
 
+/* Phone-first game density: the table never steals space from the hand or
+   actions, while the horizontal hand remains the only scrollable axis. */
+@media (max-width: 420px) {
+  .game-topbar { gap: 0.35rem; padding-bottom: 0.45rem; }
+  .table-area { min-height: 15.5rem; padding-top: 0.75rem; padding-bottom: 0.5rem; }
+  .table-stage { height: 16.5rem !important; }
+  .bottom-bar { padding-top: 0.5rem; }
+  .bottom-bar .brutal-btn { min-height: 44px; padding-inline: 0.5rem; }
+}
+
+/* iPad uses a bounded wider table, not stretched controls. */
+@media (min-width: 640px) and (max-width: 1024px) {
+  .table-stage { max-width: 44rem; }
+  .table-area { min-height: 24rem; }
+  .bottom-bar > div { max-width: 44rem; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     scroll-behavior: auto !important;
@@ -210,8 +227,8 @@
 
 .reaction-button {
   display: inline-flex;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.75rem;
+  height: 2.75rem;
   align-items: center;
   justify-content: center;
   border: 2px solid var(--color-ink);

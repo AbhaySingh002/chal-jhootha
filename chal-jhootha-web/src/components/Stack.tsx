@@ -5,9 +5,10 @@ import { Card } from './Card';
 
 export const Stack: React.FC = () => {
   const { gameState } = useGameStore();
-  const lastActor = gameState?.lastAction
-    ? gameState.players.find((player) => player.id === gameState.lastAction?.playerId)?.name
+  const topActor = gameState?.topPlay
+    ? gameState.players.find((player) => player.id === gameState.topPlay?.playerId)?.name
     : null;
+  const topClaim = gameState?.topPlay?.claims.map((claim) => `${claim.count} × ${claim.rank}${claim.count === 1 ? '' : 's'}`).join(' + ');
   const emptyClaimLabel = gameState?.claimedRank
     ? `${gameState.claimedRank}s · 0 in stack`
     : 'Fresh round · 0 in stack';
@@ -26,7 +27,7 @@ export const Stack: React.FC = () => {
         </div>
         <div className="mt-2.5 flex min-h-8 flex-col items-center rounded-md border-2 border-ink bg-surface px-3 py-1.5 text-center font-mono shadow-[2px_2px_0_var(--color-ink)]">
           <span className="font-display text-sm uppercase text-ink">{emptyClaimLabel}</span>
-          {lastActor ? <span className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">{lastActor}</span> : null}
+          {topActor ? <span className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">Last play · {topActor}</span> : null}
         </div>
       </div>
     );
@@ -67,7 +68,7 @@ export const Stack: React.FC = () => {
         <span className="font-display text-sm uppercase text-ink">
           <span className="text-evidence-red">{gameState.claimedRank}s</span> · {gameState.stackCount} in stack
         </span>
-        {lastActor ? <span className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">{lastActor}</span> : null}
+        {topActor && topClaim ? <span className="mt-0.5 max-w-[17rem] text-center text-[10px] font-bold uppercase tracking-[0.06em] text-ink-muted">Last play · {topActor} · {topClaim}</span> : null}
       </div>
     </div>
   );

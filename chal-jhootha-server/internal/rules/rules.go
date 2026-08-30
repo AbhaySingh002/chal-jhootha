@@ -94,6 +94,39 @@ func IsBluff(playedCards []ws.Card, claimedRank ws.Rank) bool {
 	return false
 }
 
+// IsClaimBluff checks the complete visible claim for a play. A combo is true
+// only when its claimed rank/count multiset exactly matches the played cards.
+func IsClaimBluff(playedCards []ws.Card, claims []ws.ClaimGroup) bool {
+	if len(playedCards) == 0 || len(claims) == 0 {
+		return true
+	}
+	claimed := make(map[ws.Rank]int, len(claims))
+	claimTotal := 0
+	for _, claim := range claims {
+		if claim.Count < 1 || claim.Rank == "" {
+			return true
+		}
+		claimed[claim.Rank] += claim.Count
+		claimTotal += claim.Count
+	}
+	if claimTotal != len(playedCards) {
+		return true
+	}
+	actual := make(map[ws.Rank]int, len(claimed))
+	for _, card := range playedCards {
+		actual[card.Rank]++
+	}
+	if len(actual) != len(claimed) {
+		return true
+	}
+	for rank, count := range claimed {
+		if actual[rank] != count {
+			return true
+		}
+	}
+	return false
+}
+
 // SkipBurns is true when the player skipping is the round opener
 // (the turn has already circled back to them).
 func SkipBurns(skipperID string, roundOpenerID *string) bool {

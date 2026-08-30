@@ -127,7 +127,7 @@ export const GameRoom: React.FC = () => {
   const { code } = useParams<{ code: string }>();
   const [, setLocation] = useLocation();
   const {
-    gameState, isConnected, connectionStatus, playerId, roomCode, joinRoom, resetSession, resetToLobby,
+    gameState, isConnected, connectionStatus, playerId, roomCode, joinRoom, leaveRoom, resetSession, resetToLobby,
     lastError, lastChallengeResult, lastBurned, sendVoice, sendReaction, yourRole, handsCount, myHand,
   } = useGameStore();
   const { data: session } = useSession();
@@ -189,6 +189,12 @@ export const GameRoom: React.FC = () => {
       void joinRoom(code, joinedName);
     }
   }, [code, roomCode, isConnected, gameState, session?.user?.name, joinRoom, joinedName]);
+
+  useEffect(() => {
+    if (hasAttemptedJoin.current && !roomCode && !gameState) {
+      setLocation('/');
+    }
+  }, [gameState, roomCode, setLocation]);
 
   const finishFlight = useCallback((flight: CardFlight) => {
     setFlights((current) => current.filter((candidate) => candidate.id !== flight.id));
@@ -318,8 +324,7 @@ export const GameRoom: React.FC = () => {
   const voiceUnavailable = !!gameState && gameState.players.length > 8;
 
   const handleLeaveGame = () => {
-    resetSession();
-    setLocation('/');
+    leaveRoom();
   };
 
   const sendTableReaction = (emoji: string) => {
@@ -434,7 +439,7 @@ export const GameRoom: React.FC = () => {
 
       {/* ── Open table play area ── */}
       <main className="table-area relative flex-1 w-full flex flex-col items-center justify-center min-h-[17rem] sm:min-h-[22rem] px-2 py-4 overflow-hidden select-none">
-        <div className="relative w-full max-w-2xl h-[17rem] sm:h-[20rem] md:h-[22rem] flex items-center justify-center">
+        <div className="table-stage relative w-full max-w-2xl h-[17rem] sm:h-[20rem] md:h-[22rem] flex items-center justify-center">
           {/* Centered played-card pile */}
           <div className="z-10 flex flex-col items-center">
             <Stack />

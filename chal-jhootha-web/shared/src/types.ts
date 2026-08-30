@@ -10,11 +10,27 @@ export interface Card {
   rank: Rank;
 }
 
+export interface ClaimGroup {
+  rank: Rank;
+  count: number;
+}
+
+export interface TopPlay {
+  playerId: string;
+  cardCount: number;
+  claims: ClaimGroup[];
+}
+
+export interface LastMatchSummary {
+  winnerIds: string[];
+}
+
 export interface Player {
   id: string;
   name: string;
   userId?: string | null;
   guestName?: string | null;
+  avatarId?: string;
   handCount: number;
   isDisconnected: boolean;
   isWinner: boolean;
@@ -42,9 +58,11 @@ export interface GameState {
     type: 'add' | 'challenge' | 'skip' | 'won';
     details?: any;
   } | null;
+  topPlay?: TopPlay | null;
   winners?: string[];
   deckCount?: number;
   winnerCount?: number;
   winnerCountLocked?: boolean;
   pendingFinishId?: string | null;
+  lastMatch?: LastMatchSummary | null;
 }

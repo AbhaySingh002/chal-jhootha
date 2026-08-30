@@ -37,13 +37,18 @@ export const Home: React.FC = () => {
     if (isRegistered && session?.user?.name) {
       return session.user.name;
     }
-    return guestName.trim() || `AGENT_${Math.floor(100 + Math.random() * 900)}`;
+    return guestName.trim();
   };
 
   const handleCreate = () => {
     setCreateError(null);
     setIsCreating(true);
     const nameToUse = resolvePlayerName();
+    if (!nameToUse) {
+      setCreateError('Enter a player alias to create a room.');
+      setIsCreating(false);
+      return;
+    }
     void createRoom(nameToUse);
     createTimeout.current = window.setTimeout(() => {
       setIsCreating((creating) => {
@@ -60,6 +65,10 @@ export const Home: React.FC = () => {
     const cleanCode = code.trim().toUpperCase();
     if (cleanCode.length !== 4) return;
     const nameToUse = resolvePlayerName();
+    if (!nameToUse) {
+      setCreateError('Enter a player alias to join a room.');
+      return;
+    }
     void joinRoom(cleanCode, nameToUse);
     setLocation(`/room/${cleanCode}`);
   };
@@ -91,7 +100,7 @@ export const Home: React.FC = () => {
           <div className="mt-6 flex flex-wrap items-center gap-3 font-mono text-xs font-bold uppercase text-ink-muted">
             <div className="flex items-center gap-2 rounded-lg border border-ink/20 bg-surface px-3 py-1.5 shadow-[2px_2px_0_var(--color-ink)]">
               <Users size={15} className="text-evidence-red" strokeWidth={2.5} />
-              <span>2–8 PLAYERS</span>
+              <span>2+ PLAYERS</span>
             </div>
             <div className="flex items-center gap-2 rounded-lg border border-ink/20 bg-surface px-3 py-1.5 shadow-[2px_2px_0_var(--color-ink)]">
               <Shield size={15} className="text-confirmed-green" strokeWidth={2.5} />
@@ -156,7 +165,7 @@ export const Home: React.FC = () => {
           <button
             type="button"
             onClick={handleCreate}
-            disabled={isCreating}
+            disabled={isCreating || (!isRegistered && !guestName.trim())}
             className="brutal-btn flex w-full items-center justify-center gap-2 bg-confirmed-green text-white transition-transform active:scale-[0.98]"
           >
             <Plus size={18} strokeWidth={2.5} />
@@ -196,7 +205,7 @@ export const Home: React.FC = () => {
             </div>
             <button
               type="submit"
-              disabled={code.trim().length !== 4}
+              disabled={code.trim().length !== 4 || (!isRegistered && !guestName.trim())}
               className="brutal-btn flex w-full items-center justify-center gap-2 bg-caution-yellow text-ink transition-transform active:scale-[0.98]"
             >
               <span>Join Room</span>

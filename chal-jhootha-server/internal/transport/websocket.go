@@ -61,6 +61,7 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 		activeConns := logger.IncActiveConnections()
 		logger.WSConnect(connID, r.RemoteAddr, r.UserAgent(), activeConns)
 		logger.Info("WS", "Authenticated connection", "conn", connID, "userId", user.ID)
+		authSvc.MarkOnline(r.Context(), user)
 
 		sess := &session{
 			ConnID:           connID,
@@ -146,7 +147,7 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 				sess.sendError(base.ClientMsgID, "INVALID_PAYLOAD", "Validation failed")
 				continue
 			}
-			if base.ProtocolVersion != "" && base.ProtocolVersion != "1.0.0" {
+			if base.ProtocolVersion != "" && base.ProtocolVersion != "1.0.0" && base.ProtocolVersion != "2.0.0" {
 				sess.sendError(base.ClientMsgID, "VERSION_MISMATCH", "Unsupported protocol version")
 				continue
 			}
@@ -183,6 +184,7 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 						ClientMsgID:  base.ClientMsgID,
 						PlayerName:   name,
 						UserID:       sess.UserID,
+						AvatarID:     user.AvatarID,
 						DeckCount:    ev.DeckCount,
 						WinnerCount:  ev.WinnerCount,
 						ConnectionID: sess.ConnID,
@@ -238,6 +240,7 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 						ClientMsgID:  base.ClientMsgID,
 						PlayerName:   name,
 						UserID:       sess.UserID,
+						AvatarID:     user.AvatarID,
 						RejoinToken:  ev.RejoinToken,
 						ConnectionID: sess.ConnID,
 						Outbound:     sess.Outbound,
@@ -312,7 +315,20 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 					_ = json.Unmarshal(msgBytes, &ev)
 					return &ev
 				})
+			case "leave_room":
+				sess.forwardToRoom(rm, base.ClientMsgID, msgBytes, func() any {
+					var ev ws.LeaveRoomEvent
+					_ = json.Unmarshal(msgBytes, &ev)
+					return &ev
+				})
+			case "destroy_room":
+				sess.forwardToRoom(rm, base.ClientMsgID, msgBytes, func() any {
+					var ev ws.DestroyRoomEvent
+					_ = json.Unmarshal(msgBytes, &ev)
+					return &ev
+				})
 			case "heartbeat":
+				authSvc.MarkOnline(ctx, user)
 			default:
 				sess.sendError(base.ClientMsgID, "INVALID_PAYLOAD", "Unknown event type")
 			}
@@ -333,6 +349,13 @@ func (s *session) sendError(clientMsgID, code, msg string) {
 }
 
 func (s *session) forwardToRoom(rm *room.Manager, clientMsgID string, msgBytes []byte, parse func() any) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	available := rm.RuntimeHealthy(ctx)
+	cancel()
+	if !available {
+		s.sendError(clientMsgID, "RUNTIME_UNAVAILABLE", "Live game service is temporarily unavailable. Please try again.")
+		return
+	}
 	if !s.Joined || s.RoomCode == "" || s.PlayerID == "" {
 		s.sendError(clientMsgID, "UNAUTHORIZED", "Not joined to a room")
 		return

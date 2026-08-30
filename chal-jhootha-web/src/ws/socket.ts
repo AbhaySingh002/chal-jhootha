@@ -9,7 +9,7 @@ let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 let messageQueue: ClientEvent[] = [];
 let reconnectAttempts = 0;
 let connectLock: Promise<void> | null = null;
-const reliableActionTypes = new Set(['start_game', 'reset_to_lobby', 'set_config', 'play_cards', 'challenge', 'skip']);
+const reliableActionTypes = new Set(['start_game', 'reset_to_lobby', 'set_config', 'play_cards', 'challenge', 'skip', 'leave_room', 'destroy_room']);
 const pendingReliableEvents = new Map<string, ClientEvent>();
 
 function isReliableAction(event: ClientEvent) {

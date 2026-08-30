@@ -9,6 +9,11 @@ export const PlayerSeat: React.FC<{ player: Player; position: number; total: num
   const isWinner = player.isWinner || player.role === 'winner_spectator';
   const presence = player.isAbandoned ? 'abandoned' : player.isDisconnected ? 'away' : 'active';
   const presenceColor = presence === 'away' ? 'bg-evidence-red' : presence === 'abandoned' ? 'bg-surface-muted' : 'bg-confirmed-green';
+  const avatarMarks: Record<string, string> = {
+    'ace-spades': 'A♠', 'king-hearts': 'K♥', 'queen-diamonds': 'Q♦',
+    'jack-clubs': 'J♣', 'joker-red': 'JR', 'joker-black': 'JB',
+  };
+  const avatarMark = avatarMarks[player.avatarId || ''] || player.name.substring(0, 2).toUpperCase();
 
   // Calculate arc position around the central pile (upper semicircle / stadium layout)
   let angle = -Math.PI / 2; // Default 1 player: top center (-90deg)
@@ -41,7 +46,7 @@ export const PlayerSeat: React.FC<{ player: Player; position: number; total: num
         isWinner ? "bg-confirmed-green text-white shadow-[2px_2px_0_var(--color-ink)]" :
         "bg-surface text-ink shadow-[2px_2px_0_var(--color-ink)]"
       )}>
-        {player.name.substring(0, 2).toUpperCase()}
+        {avatarMark}
         <span
           aria-label={presence === 'away' ? 'Away' : presence === 'abandoned' ? 'Abandoned' : 'Active'}
           className={clsx('absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-surface', presenceColor)}

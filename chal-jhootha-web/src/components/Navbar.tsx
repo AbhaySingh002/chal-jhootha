@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
-import { LogIn, LogOut, Shield, Sparkles, User, Users } from 'lucide-react';
+import { Bell, LogIn, LogOut, Shield, Sparkles, User, Users, X } from 'lucide-react';
 import { signOut, useSession } from '../lib/auth';
-import { getFriendships } from '../lib/profile';
+import { getFriendships, getRoomInvites, respondToRoomInvite, type RoomInvite } from '../lib/profile';
 import { ThemeToggle } from './ThemeToggle';
+import { useGameStore } from '../state/gameStore';
 
 type NavbarProps = {
   currentTab?: 'play' | 'friends' | 'profile';
@@ -14,6 +15,9 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = 'play' }) => {
   const { data: session } = useSession();
   const isRegistered = session?.user.isRegistered === true;
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+  const [invites, setInvites] = useState<RoomInvite[]>([]);
+  const [showInvites, setShowInvites] = useState(false);
+  const { joinRoom } = useGameStore();
 
   useEffect(() => {
     if (!isRegistered) return;
@@ -30,6 +34,38 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = 'play' }) => {
       mounted = false;
     };
   }, [isRegistered, location]);
+
+  useEffect(() => {
+    if (!isRegistered) {
+      return;
+    }
+    let active = true;
+    const refresh = () => {
+      getRoomInvites().then((data) => {
+        if (active) setInvites(data.invites);
+      }).catch(() => {});
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 10_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [isRegistered]);
+
+  const respondToInvite = async (invite: RoomInvite, accept: boolean) => {
+    try {
+      const result = await respondToRoomInvite(invite.token, accept);
+      setInvites((current) => current.filter((item) => item.token !== invite.token));
+      if (accept && result.roomCode) {
+        setShowInvites(false);
+        await joinRoom(result.roomCode, session?.user.name || '');
+        setLocation(`/room/${result.roomCode}`);
+      }
+    } catch {
+      setInvites((current) => current.filter((item) => item.token !== invite.token));
+    }
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -126,6 +162,16 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = 'play' }) => {
             </button>
             <button
               type="button"
+              onClick={() => setShowInvites(true)}
+              className="icon-btn relative border-2 bg-surface text-ink"
+              aria-label="Room invitations"
+              title="Room invitations"
+            >
+              <Bell size={16} strokeWidth={2.5} />
+              {invites.length > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border border-ink bg-evidence-red px-1 font-mono text-[9px] font-bold text-white">{invites.length}</span>}
+            </button>
+            <button
+              type="button"
               onClick={handleSignOut}
               className="icon-btn border-2 bg-evidence-red text-white"
               aria-label="Sign out"
@@ -147,6 +193,30 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = 'play' }) => {
 
         <ThemeToggle />
       </div>
+
+      {showInvites && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4" onClick={(event) => { if (event.target === event.currentTarget) setShowInvites(false); }}>
+          <section className="brutal-card w-full max-w-sm p-5 shadow-[6px_6px_0_var(--color-ink)]" aria-label="Room invitations">
+            <div className="flex items-center justify-between border-b-2 border-ink pb-2">
+              <h2 className="font-display text-xl uppercase">Live Invites</h2>
+              <button type="button" className="icon-btn h-8 w-8" onClick={() => setShowInvites(false)} aria-label="Close invitations"><X size={16} /></button>
+            </div>
+            {invites.length === 0 ? <p className="py-6 text-center font-mono text-xs text-ink-muted">No active room invites.</p> : (
+              <ul className="mt-4 space-y-3">
+                {invites.map((invite) => (
+                  <li key={invite.token} className="border-2 border-ink bg-paper p-3 font-mono text-xs">
+                    <p><strong>{invite.hostName}</strong> invited you to room <strong>{invite.roomCode}</strong>.</p>
+                    <div className="mt-3 flex gap-2">
+                      <button type="button" className="brutal-btn brutal-btn-compact flex-1 bg-confirmed-green text-white" onClick={() => void respondToInvite(invite, true)}>Accept</button>
+                      <button type="button" className="brutal-btn brutal-btn-compact flex-1 bg-surface text-ink" onClick={() => void respondToInvite(invite, false)}>Decline</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      )}
     </header>
   );
 };

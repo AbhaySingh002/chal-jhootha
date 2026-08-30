@@ -19,7 +19,6 @@ import (
 const (
 	DisconnectSkipAfter    = 60 * time.Second
 	DisconnectAbandonAfter = 3 * time.Minute
-	MaxSeats               = 52 // ponytail: hard seat cap; raise if needed
 	MaxVoiceParticipants   = 8
 	defaultRoomIdleTTL     = 24 * time.Hour
 )
@@ -45,7 +44,6 @@ type Room struct {
 
 	playerHands      map[string][]ws.Card
 	stack            []ws.Card
-	topPlayCount     int
 	rejoinTokens     map[string]string
 	connections      map[string]connectionState // connID ->
 	controllerConn   map[string]string          // playerID -> connID
@@ -61,6 +59,9 @@ type Room struct {
 	lastReactionAt   map[string]time.Time
 	persistFn        func(*Room)
 	recordMatchFn    func(matchID, roomCode string, participants []store.MatchParticipant) error
+	destroyFn        func(string)
+	actionLease      func(string, func() error) error
+	leaseHeld        bool
 	activeClientMsg  string
 
 	ctx    context.Context
@@ -111,6 +112,17 @@ func (r *Room) persist() {
 
 func (r *Room) SetMatchRecorder(fn func(matchID, roomCode string, participants []store.MatchParticipant) error) {
 	r.recordMatchFn = fn
+}
+
+// SetDestroyHandler is owned by Manager. It is called asynchronously after a
+// final room event is delivered so an explicit departure never behaves like a
+// transient socket loss.
+func (r *Room) SetDestroyHandler(fn func(string)) {
+	r.destroyFn = fn
+}
+
+func (r *Room) SetActionLease(fn func(string, func() error) error) {
+	r.actionLease = fn
 }
 
 func (r *Room) Run() {
@@ -171,6 +183,23 @@ func (r *Room) commitAction(playerID, connID, clientMsgID string) {
 }
 
 func (r *Room) processMessage(msg RoomMessage) {
+	// Commands received from a WebSocket carry a client message ID. Guard them
+	// with Redis' short per-room lease before touching actor state; timers and
+	// internal joins remain local actor operations.
+	if msg.ClientMsg != "" && r.actionLease != nil && !r.leaseHeld {
+		r.leaseHeld = true
+		err := r.actionLease(r.Code, func() error {
+			r.processMessage(msg)
+			return nil
+		})
+		r.leaseHeld = false
+		if err != nil {
+			r.activeClientMsg = msg.ClientMsg
+			r.reject(msg.PlayerID, msg.ConnectionID, "ROOM_BUSY", "Another room action is being applied. Try again.")
+			r.activeClientMsg = ""
+		}
+		return
+	}
 	r.activeClientMsg = msg.ClientMsg
 	defer func() { r.activeClientMsg = "" }()
 	start := time.Now()
@@ -214,6 +243,18 @@ func (r *Room) processMessage(msg RoomMessage) {
 		}
 		r.handleResetToLobby(msg.PlayerID, msg.ConnectionID, ev)
 		logger.EventProcessed(r.Code, msg.PlayerID, "reset_to_lobby", r.seq, time.Since(start))
+	case *ws.LeaveRoomEvent:
+		if r.replayDuplicate(msg.PlayerID, msg.ConnectionID, ev.ClientMsgID) {
+			return
+		}
+		r.handleLeaveRoom(msg.PlayerID, msg.ConnectionID, ev)
+		logger.EventProcessed(r.Code, msg.PlayerID, "leave_room", r.seq, time.Since(start))
+	case *ws.DestroyRoomEvent:
+		if r.replayDuplicate(msg.PlayerID, msg.ConnectionID, ev.ClientMsgID) {
+			return
+		}
+		r.handleDestroyRoom(msg.PlayerID, msg.ConnectionID, ev)
+		logger.EventProcessed(r.Code, msg.PlayerID, "destroy_room", r.seq, time.Since(start))
 	case *ws.VoiceSignalEvent:
 		r.handleVoice(msg.PlayerID, ev)
 	case *ws.ReactionEvent:
@@ -228,6 +269,11 @@ func (r *Room) processMessage(msg RoomMessage) {
 		r.handleTimeoutSkip(ev)
 	case AbandonEvent:
 		r.handleAbandon(ev)
+	case lobbyHostQuery:
+		select {
+		case ev.reply <- r.State.Phase == ws.PhaseLobby && r.State.HostID == ev.playerID:
+		default:
+		}
 	}
 }
 
@@ -328,6 +374,7 @@ func (r *Room) roomStateEvent() ws.RoomStateEvent {
 		DeckCount:         r.State.DeckCount,
 		WinnerCount:       r.State.WinnerCount,
 		WinnerCountLocked: r.State.WinnerCountLocked,
+		LastMatch:         r.State.LastMatch,
 	}
 }
 
@@ -357,6 +404,7 @@ func (r *Room) gameStateEventFor(playerID, connID string) ws.GameStateEvent {
 		CurrentTurnPlayerID: r.State.CurrentTurnPlayerID,
 		RoundOpenerID:       r.State.RoundOpenerID,
 		LastAction:          r.State.LastAction,
+		TopPlay:             r.State.TopPlay,
 		Winners:             r.State.Winners,
 		DeckCount:           r.State.DeckCount,
 		WinnerCount:         r.State.WinnerCount,
@@ -364,6 +412,7 @@ func (r *Room) gameStateEventFor(playerID, connID string) ws.GameStateEvent {
 		PendingFinishID:     r.State.PendingFinishID,
 		YouAreController:    controller,
 		YourRole:            r.playerRole(playerID),
+		LastMatch:           r.State.LastMatch,
 	}
 }
 
@@ -434,6 +483,7 @@ type InternalJoinEvent struct {
 	ClientMsgID  string
 	PlayerName   string
 	UserID       string
+	AvatarID     string
 	RejoinToken  *string
 	DeckCount    int
 	WinnerCount  int
@@ -537,15 +587,6 @@ func (r *Room) handleInternalJoin(ev InternalJoinEvent) {
 		return
 	}
 
-	if len(r.State.Players) >= MaxSeats {
-		r.sendToOutbound(ev.Outbound, ws.ErrorEvent{Type: "error", Code: "ROOM_FULL", Message: "Room is full"})
-		select {
-		case ev.ReplyChan <- "":
-		default:
-		}
-		return
-	}
-
 	playerID := userID
 	r.attachConn(playerID, ev.ConnectionID, ev.Outbound)
 	uid := userID
@@ -562,7 +603,7 @@ func (r *Room) handleInternalJoin(ev InternalJoinEvent) {
 		name = "PLAYER"
 	}
 	r.State.Players = append(r.State.Players, ws.Player{
-		ID: playerID, Name: name, UserID: &uid, Role: ws.RoleActive,
+		ID: playerID, Name: name, UserID: &uid, AvatarID: ev.AvatarID, Role: ws.RoleActive,
 	})
 	r.seq++
 	token := randomToken()
@@ -633,6 +674,80 @@ func (r *Room) handleInternalLeave(playerID string, ev InternalLeaveEvent) {
 	}
 }
 
+// handleLeaveRoom is a deliberate lobby action. A browser closing should not
+// use this path: reconnecting is still supported by handleInternalLeave.
+func (r *Room) handleLeaveRoom(playerID, connID string, ev *ws.LeaveRoomEvent) {
+	if !r.isController(playerID, connID) {
+		r.reject(playerID, connID, "NOT_ACTIVE_CONTROLLER", "This device is not the active controller")
+		return
+	}
+	if r.State.Phase != ws.PhaseLobby {
+		r.reject(playerID, connID, "GAME_IN_PROGRESS", "Leave the room after this match returns to the lobby")
+		return
+	}
+
+	index := -1
+	for i, p := range r.State.Players {
+		if p.ID == playerID {
+			index = i
+			break
+		}
+	}
+	if index == -1 {
+		r.reject(playerID, connID, "UNAUTHORIZED", "Not seated in this room")
+		return
+	}
+
+	r.State.Players = append(r.State.Players[:index], r.State.Players[index+1:]...)
+	r.seq++
+	// Deliver the acknowledgement while this controller connection is still
+	// registered; it is removed immediately afterwards.
+	r.sendToConn(connID, ws.RoomLeftEvent{Type: "room_left", Seq: r.seq, RoomCode: r.Code})
+	delete(r.playerHands, playerID)
+	delete(r.rejoinTokens, playerID)
+	delete(r.voiceMembers, playerID)
+	delete(r.controllerConn, playerID)
+	for id, st := range r.connections {
+		if st.PlayerID == playerID {
+			delete(r.connections, id)
+		}
+	}
+	if r.State.HostID == playerID && len(r.State.Players) > 0 {
+		// Slice order is seating order; the first remaining player is host.
+		r.State.HostID = r.State.Players[0].ID
+	}
+	r.commitAction(playerID, connID, ev.ClientMsgID)
+
+	if len(r.State.Players) == 0 {
+		if r.destroyFn != nil {
+			go r.destroyFn(r.Code)
+		}
+		return
+	}
+	r.broadcastRoomState()
+}
+
+func (r *Room) handleDestroyRoom(playerID, connID string, ev *ws.DestroyRoomEvent) {
+	if !r.isController(playerID, connID) {
+		r.reject(playerID, connID, "NOT_ACTIVE_CONTROLLER", "This device is not the active controller")
+		return
+	}
+	if r.State.HostID != playerID {
+		r.reject(playerID, connID, "NOT_HOST", "Only the host can destroy the room")
+		return
+	}
+	if r.State.Phase != ws.PhaseLobby {
+		r.reject(playerID, connID, "GAME_IN_PROGRESS", "A room can only be destroyed from its lobby")
+		return
+	}
+	r.seq++
+	r.broadcast(ws.RoomDestroyedEvent{Type: "room_destroyed", Seq: r.seq, RoomCode: r.Code})
+	r.commitAction(playerID, connID, ev.ClientMsgID)
+	if r.destroyFn != nil {
+		go r.destroyFn(r.Code)
+	}
+}
+
 func (r *Room) handleTimeoutSkip(ev TimeoutSkipEvent) {
 	if r.State.Phase != ws.PhasePlaying {
 		return
@@ -699,15 +814,26 @@ func (r *Room) handleResetToLobby(playerID, connID string, ev *ws.ResetToLobbyEv
 		r.reject(playerID, connID, "NOT_HOST", "Only host can return to lobby")
 		return
 	}
+	r.resetForLobby()
+
+	r.seq++
+	r.commitAction(playerID, connID, ev.ClientMsgID)
+	r.broadcastRoomState()
+}
+
+func (r *Room) resetForLobby() {
 	r.State.Phase = ws.PhaseLobby
 	r.State.CurrentTurnPlayerID = nil
 	r.State.RoundOpenerID = nil
 	r.State.ClaimedRank = nil
 	r.State.LastAction = nil
+	r.State.TopPlay = nil
 	r.State.StackCount = 0
 	r.stack = []ws.Card{}
 	r.State.Winners = []string{}
+	r.State.LastMatch = nil
 	r.State.PendingFinishID = nil
+	r.State.WinnerCountLocked = false
 	r.playerHands = make(map[string][]ws.Card)
 	r.matchID = ""
 	r.startedAt = nil
@@ -715,12 +841,9 @@ func (r *Room) handleResetToLobby(playerID, connID string, ev *ws.ResetToLobbyEv
 	for i := range r.State.Players {
 		r.State.Players[i].HandCount = 0
 		r.State.Players[i].IsWinner = false
+		r.State.Players[i].IsAbandoned = false
 		r.State.Players[i].Role = ws.RoleActive
 	}
-
-	r.seq++
-	r.commitAction(playerID, connID, ev.ClientMsgID)
-	r.broadcastRoomState()
 }
 
 func (r *Room) handleStartGame(playerID, connID string, ev *ws.StartGameEvent) {
@@ -734,6 +857,10 @@ func (r *Room) handleStartGame(playerID, connID string, ev *ws.StartGameEvent) {
 	}
 	if r.State.Phase != ws.PhaseLobby {
 		r.reject(playerID, connID, "ALREADY_STARTED", "Game already started")
+		return
+	}
+	if len(r.State.Players) > r.State.DeckCount*52 {
+		r.reject(playerID, connID, "NOT_ENOUGH_CARDS", "Choose more decks or remove players so everyone can receive a card")
 		return
 	}
 
@@ -775,9 +902,11 @@ func (r *Room) handleStartGame(playerID, connID string, ev *ws.StartGameEvent) {
 	r.stack = []ws.Card{}
 	r.State.ClaimedRank = nil
 	r.State.LastAction = nil
+	r.State.TopPlay = nil
 	logger.Info("GAME", "Game started", "room", r.Code, "players", len(ids), "opener", opener, "decks", r.State.DeckCount, "winnerCount", r.State.WinnerCount)
 	r.commitAction(playerID, connID, ev.ClientMsgID)
 	r.broadcastGameState()
+	r.returnCompletedGameToLobby()
 }
 
 func (r *Room) handlePlayCards(playerID, connID string, ev *ws.PlayCardsEvent) {
@@ -825,13 +954,26 @@ func (r *Room) handlePlayCards(playerID, connID string, ev *ws.PlayCardsEvent) {
 
 	opening := r.State.StackCount == 0
 	claimed := r.State.ClaimedRank
+	claims := append([]ws.ClaimGroup(nil), ev.Claims...)
 	if opening {
-		if ev.ClaimedRank == nil {
+		if len(claims) == 0 && ev.ClaimedRank != nil {
+			claims = []ws.ClaimGroup{{Rank: *ev.ClaimedRank, Count: len(playedCards)}}
+		}
+		if !validOpeningClaims(claims, len(playedCards)) {
 			r.reject(playerID, connID, "MISSING_RANK", "Must announce rank to open round")
 			return
 		}
-		claimed = ev.ClaimedRank
+		activeRank := claims[len(claims)-1].Rank
+		claimed = &activeRank
 		r.State.RoundOpenerID = &playerID
+	} else if len(claims) != 0 {
+		r.reject(playerID, connID, "INVALID_CLAIM", "Only an opening play can use multiple claimed ranks")
+		return
+	} else if claimed == nil {
+		r.reject(playerID, connID, "MISSING_RANK", "Round has no active rank")
+		return
+	} else {
+		claims = []ws.ClaimGroup{{Rank: *claimed, Count: len(playedCards)}}
 	}
 
 	var newHand []ws.Card
@@ -852,11 +994,11 @@ func (r *Room) handlePlayCards(playerID, connID string, ev *ws.PlayCardsEvent) {
 
 	r.State.ClaimedRank = claimed
 	r.State.StackCount += len(playedCards)
-	r.topPlayCount = len(playedCards)
+	r.State.TopPlay = &ws.TopPlay{PlayerID: playerID, CardCount: len(playedCards), Claims: claims}
 	r.State.LastAction = &ws.LastAction{
 		PlayerID: playerID,
 		Type:     ws.ActionAdd,
-		Details:  map[string]any{"count": len(playedCards), "rank": claimed},
+		Details:  map[string]any{"count": len(playedCards), "claims": claims},
 	}
 
 	if len(newHand) == 0 {
@@ -864,7 +1006,10 @@ func (r *Room) handlePlayCards(playerID, connID string, ev *ws.PlayCardsEvent) {
 		r.State.PendingFinishID = &pid
 	}
 
-	r.confirmPendingIfStood(playerID)
+	// A new play makes the previous top play unchallengeable. This is the
+	// chosen confirmation point for a player pending on an empty hand. Apply
+	// the superseding play first so a winning transition never drops it.
+	r.confirmPendingFinish()
 
 	r.seq++
 	if r.State.Phase == ws.PhasePlaying {
@@ -874,6 +1019,26 @@ func (r *Room) handlePlayCards(playerID, connID string, ev *ws.PlayCardsEvent) {
 	logger.Info("PLAY", "Cards played", "room", r.Code, "player", playerID, "count", len(playedCards), "remainingHand", len(newHand), "stackTotal", r.State.StackCount)
 	r.commitAction(playerID, connID, ev.ClientMsgID)
 	r.broadcastGameState()
+	r.returnCompletedGameToLobby()
+}
+
+func validOpeningClaims(claims []ws.ClaimGroup, cardCount int) bool {
+	if len(claims) == 0 || cardCount < 1 {
+		return false
+	}
+	seenRanks := make(map[ws.Rank]struct{}, len(claims))
+	total := 0
+	for _, claim := range claims {
+		if claim.Rank == "" || claim.Count < 1 {
+			return false
+		}
+		if _, duplicate := seenRanks[claim.Rank]; duplicate {
+			return false
+		}
+		seenRanks[claim.Rank] = struct{}{}
+		total += claim.Count
+	}
+	return total == cardCount
 }
 
 func (r *Room) handleChallenge(playerID, connID string, ev *ws.ChallengeEvent) {
@@ -888,18 +1053,18 @@ func (r *Room) handleChallenge(playerID, connID string, ev *ws.ChallengeEvent) {
 		r.reject(playerID, connID, "STALE_ACTION", "State has changed")
 		return
 	}
-	if r.State.StackCount == 0 || r.State.LastAction == nil || r.State.LastAction.Type != ws.ActionAdd {
+	if r.State.StackCount == 0 || r.State.TopPlay == nil {
 		r.reject(playerID, connID, "INVALID_CHALLENGE", "Nothing to challenge")
 		return
 	}
-	if r.State.ClaimedRank == nil || r.topPlayCount <= 0 || len(r.stack) < r.topPlayCount {
+	if r.State.TopPlay.CardCount <= 0 || len(r.stack) < r.State.TopPlay.CardCount {
 		r.reject(playerID, connID, "INVALID_CHALLENGE", "Nothing to challenge")
 		return
 	}
 
-	challengedPlayerID := r.State.LastAction.PlayerID
-	topCards := r.stack[len(r.stack)-r.topPlayCount:]
-	wasBluff := rules.IsBluff(topCards, *r.State.ClaimedRank)
+	challengedPlayerID := r.State.TopPlay.PlayerID
+	topCards := r.stack[len(r.stack)-r.State.TopPlay.CardCount:]
+	wasBluff := rules.IsClaimBluff(topCards, r.State.TopPlay.Claims)
 
 	loserID := playerID
 	nextStarterID := challengedPlayerID
@@ -926,8 +1091,8 @@ func (r *Room) handleChallenge(playerID, connID string, ev *ws.ChallengeEvent) {
 
 	if wasBluff && r.State.PendingFinishID != nil && *r.State.PendingFinishID == challengedPlayerID {
 		r.State.PendingFinishID = nil
-	} else {
-		r.confirmPendingIfStood(playerID)
+	} else if !wasBluff && r.State.PendingFinishID != nil && *r.State.PendingFinishID == challengedPlayerID {
+		r.confirmPendingFinish()
 	}
 
 	r.seq++
@@ -941,13 +1106,26 @@ func (r *Room) handleChallenge(playerID, connID string, ev *ws.ChallengeEvent) {
 	r.stack = []ws.Card{}
 	r.State.StackCount = 0
 	r.State.ClaimedRank = nil
-	r.topPlayCount = 0
+	r.State.TopPlay = nil
 	r.State.CurrentTurnPlayerID = &nextStarterID
 	r.State.RoundOpenerID = &nextStarterID
 	r.State.LastAction = &ws.LastAction{PlayerID: playerID, Type: ws.ActionChallenge}
 	r.maybeEndGame()
 	r.commitAction(playerID, connID, ev.ClientMsgID)
 	r.broadcastGameState()
+	r.returnCompletedGameToLobby()
+}
+
+func (r *Room) returnCompletedGameToLobby() {
+	if r.State.Phase != ws.PhaseFinished {
+		return
+	}
+	summary := &ws.LastMatchSummary{WinnerIDs: append([]string(nil), r.State.Winners...)}
+	r.resetForLobby()
+	r.State.LastMatch = summary
+	r.seq++
+	r.broadcastRoomState()
+	r.persist()
 }
 
 func (r *Room) handleSkip(playerID, connID string, ev *ws.SkipEvent) {
@@ -965,8 +1143,6 @@ func (r *Room) handleSkip(playerID, connID string, ev *ws.SkipEvent) {
 		return
 	}
 
-	r.confirmPendingIfStood(playerID)
-
 	r.State.LastAction = &ws.LastAction{PlayerID: playerID, Type: ws.ActionSkip}
 	r.seq++
 
@@ -977,7 +1153,8 @@ func (r *Room) handleSkip(playerID, connID string, ev *ws.SkipEvent) {
 		r.stack = []ws.Card{}
 		r.State.StackCount = 0
 		r.State.ClaimedRank = nil
-		r.topPlayCount = 0
+		r.State.TopPlay = nil
+		r.confirmPendingFinish()
 		r.State.CurrentTurnPlayerID = &nextTurn
 		r.State.RoundOpenerID = &nextTurn
 	} else {
@@ -992,16 +1169,14 @@ func (r *Room) handleSkip(playerID, connID string, ev *ws.SkipEvent) {
 		r.persist()
 	}
 	r.broadcastGameState()
+	r.returnCompletedGameToLobby()
 }
 
-func (r *Room) confirmPendingIfStood(actorID string) {
+func (r *Room) confirmPendingFinish() {
 	if r.State.PendingFinishID == nil {
 		return
 	}
 	pid := *r.State.PendingFinishID
-	if pid == actorID {
-		return
-	}
 	for i := range r.State.Players {
 		if r.State.Players[i].ID != pid {
 			continue

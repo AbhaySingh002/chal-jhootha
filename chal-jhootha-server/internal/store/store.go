@@ -91,6 +91,7 @@ type User struct {
 	PasswordHash sql.NullString
 	DisplayName  string
 	IsRegistered bool
+	AvatarID     string
 	// IsEphemeralGuest is true only for a guest reconstructed from a signed
 	// browser session. It is deliberately never stored in the users table
 	// until that guest finishes a match or creates a registered account.
@@ -135,10 +136,10 @@ func (s *Store) CreateRegisteredUser(id, displayName, email, passwordHash, handl
 
 func (s *Store) GetUser(id string) (*User, error) {
 	u := &User{}
-	err := s.db.QueryRow(`SELECT id, email, password_hash, display_name,
-		email IS NOT NULL AND password_hash IS NOT NULL
-		FROM users WHERE id = $1`, id).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.DisplayName, &u.IsRegistered)
+	err := s.db.QueryRow(`SELECT u.id, u.email, u.password_hash, u.display_name,
+		u.email IS NOT NULL AND u.password_hash IS NOT NULL, COALESCE(p.avatar_id, 'ace-spades')
+		FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = $1`, id).
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.DisplayName, &u.IsRegistered, &u.AvatarID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -147,10 +148,10 @@ func (s *Store) GetUser(id string) (*User, error) {
 
 func (s *Store) GetUserByEmail(email string) (*User, error) {
 	u := &User{}
-	err := s.db.QueryRow(`SELECT id, email, password_hash, display_name,
-		email IS NOT NULL AND password_hash IS NOT NULL
-		FROM users WHERE email = $1`, email).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.DisplayName, &u.IsRegistered)
+	err := s.db.QueryRow(`SELECT u.id, u.email, u.password_hash, u.display_name,
+		u.email IS NOT NULL AND u.password_hash IS NOT NULL, COALESCE(p.avatar_id, 'ace-spades')
+		FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.email = $1`, email).
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.DisplayName, &u.IsRegistered, &u.AvatarID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -191,6 +192,16 @@ func (s *Store) GetSession(token string) (userID string, ok bool, err error) {
 
 func (s *Store) DeleteSession(token string) error {
 	_, err := s.db.Exec(`DELETE FROM sessions WHERE token_hash = $1`, sessionTokenHash(token))
+	return err
+}
+
+func (s *Store) DeleteSessionsForUser(userID string) error {
+	_, err := s.db.Exec(`DELETE FROM sessions WHERE user_id = $1`, userID)
+	return err
+}
+
+func (s *Store) UpdatePassword(userID, passwordHash string) error {
+	_, err := s.db.Exec(`UPDATE users SET password_hash = $1 WHERE id = $2 AND password_hash IS NOT NULL`, passwordHash, userID)
 	return err
 }
 
@@ -323,6 +334,7 @@ type Profile struct {
 	DisplayName string `json:"displayName"`
 	GamesPlayed int    `json:"gamesPlayed"`
 	GamesWon    int    `json:"gamesWon"`
+	AvatarID    string `json:"avatarId"`
 }
 
 type FriendshipView struct {
@@ -330,6 +342,16 @@ type FriendshipView struct {
 	Status    string  `json:"status"`
 	Direction string  `json:"direction"`
 	Profile   Profile `json:"profile"`
+	Online    bool    `json:"online"`
+}
+
+func (s *Store) AreFriends(userID, otherUserID string) (bool, error) {
+	var exists bool
+	err := s.db.QueryRow(`SELECT EXISTS(
+		SELECT 1 FROM friendships
+		WHERE status = 'accepted' AND ((requester_id = $1 AND addressee_id = $2) OR (requester_id = $2 AND addressee_id = $1))
+	)`, userID, otherUserID).Scan(&exists)
+	return exists, err
 }
 
 type MatchParticipant struct {
@@ -361,9 +383,9 @@ func (s *Store) GetProfile(userID string) (*Profile, error) {
 
 func (s *Store) profileByUserID(userID string) (*Profile, error) {
 	p := &Profile{}
-	err := s.db.QueryRow(`SELECT p.user_id, p.handle, u.display_name, p.games_played, p.games_won
+	err := s.db.QueryRow(`SELECT p.user_id, p.handle, u.display_name, p.games_played, p.games_won, p.avatar_id
 		FROM profiles p JOIN users u ON u.id = p.user_id WHERE p.user_id = $1`, userID).
-		Scan(&p.UserID, &p.Handle, &p.DisplayName, &p.GamesPlayed, &p.GamesWon)
+		Scan(&p.UserID, &p.Handle, &p.DisplayName, &p.GamesPlayed, &p.GamesWon, &p.AvatarID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrProfileNotFound
 	}
@@ -372,9 +394,9 @@ func (s *Store) profileByUserID(userID string) (*Profile, error) {
 
 func (s *Store) GetProfileByHandle(handle, viewerID string) (*Profile, string, error) {
 	p := &Profile{}
-	err := s.db.QueryRow(`SELECT p.user_id, p.handle, u.display_name, p.games_played, p.games_won
+	err := s.db.QueryRow(`SELECT p.user_id, p.handle, u.display_name, p.games_played, p.games_won, p.avatar_id
 		FROM profiles p JOIN users u ON u.id = p.user_id WHERE LOWER(p.handle) = LOWER($1)`, handle).
-		Scan(&p.UserID, &p.Handle, &p.DisplayName, &p.GamesPlayed, &p.GamesWon)
+		Scan(&p.UserID, &p.Handle, &p.DisplayName, &p.GamesPlayed, &p.GamesWon, &p.AvatarID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, "", ErrProfileNotFound
 	}
@@ -406,7 +428,7 @@ func (s *Store) GetProfileByHandle(handle, viewerID string) (*Profile, string, e
 	return p, "incoming", nil
 }
 
-func (s *Store) UpdateProfile(userID, handle, displayName string) (*Profile, error) {
+func (s *Store) UpdateProfile(userID, handle, displayName, avatarID string) (*Profile, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
@@ -422,7 +444,7 @@ func (s *Store) UpdateProfile(userID, handle, displayName string) (*Profile, err
 	if _, err = tx.Exec(`UPDATE users SET display_name = $1 WHERE id = $2`, displayName, userID); err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(`UPDATE profiles SET handle = $1, updated_at = NOW() WHERE user_id = $2`, strings.ToLower(handle), userID); err != nil {
+	if _, err = tx.Exec(`UPDATE profiles SET handle = $1, avatar_id = $2, updated_at = NOW() WHERE user_id = $3`, strings.ToLower(handle), avatarID, userID); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -433,7 +455,7 @@ func (s *Store) UpdateProfile(userID, handle, displayName string) (*Profile, err
 
 func (s *Store) ListFriendships(userID string) ([]FriendshipView, error) {
 	rows, err := s.db.Query(`SELECT f.id, f.status, f.requester_id, f.addressee_id,
-		p.user_id, p.handle, u.display_name, p.games_played, p.games_won
+		p.user_id, p.handle, u.display_name, p.games_played, p.games_won, p.avatar_id
 		FROM friendships f
 		JOIN profiles p ON p.user_id = CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END
 		JOIN users u ON u.id = p.user_id
@@ -448,7 +470,7 @@ func (s *Store) ListFriendships(userID string) ([]FriendshipView, error) {
 		var view FriendshipView
 		var requesterID, addresseeID string
 		if err := rows.Scan(&view.ID, &view.Status, &requesterID, &addresseeID,
-			&view.Profile.UserID, &view.Profile.Handle, &view.Profile.DisplayName, &view.Profile.GamesPlayed, &view.Profile.GamesWon); err != nil {
+			&view.Profile.UserID, &view.Profile.Handle, &view.Profile.DisplayName, &view.Profile.GamesPlayed, &view.Profile.GamesWon, &view.Profile.AvatarID); err != nil {
 			return nil, err
 		}
 		if view.Status == "accepted" {
@@ -556,13 +578,13 @@ func (s *Store) ListRecentPlayers(userID string, limit int) ([]Profile, error) {
 	if limit < 1 || limit > 50 {
 		limit = 20
 	}
-	rows, err := s.db.Query(`SELECT p.user_id, p.handle, u.display_name, p.games_played, p.games_won
+	rows, err := s.db.Query(`SELECT p.user_id, p.handle, u.display_name, p.games_played, p.games_won, p.avatar_id
 		FROM completed_match_participants mp
 		JOIN completed_matches m ON m.id = mp.match_id
 		JOIN profiles p ON p.user_id = mp.user_id
 		JOIN users u ON u.id = p.user_id
 		WHERE mp.user_id != $1 AND mp.is_registered = TRUE
-		GROUP BY p.user_id, p.handle, u.display_name, p.games_played, p.games_won
+		GROUP BY p.user_id, p.handle, u.display_name, p.games_played, p.games_won, p.avatar_id
 		ORDER BY MAX(m.completed_at) DESC LIMIT $2`, userID, limit)
 	if err != nil {
 		return nil, err
@@ -571,7 +593,7 @@ func (s *Store) ListRecentPlayers(userID string, limit int) ([]Profile, error) {
 	profiles := make([]Profile, 0)
 	for rows.Next() {
 		var p Profile
-		if err := rows.Scan(&p.UserID, &p.Handle, &p.DisplayName, &p.GamesPlayed, &p.GamesWon); err != nil {
+		if err := rows.Scan(&p.UserID, &p.Handle, &p.DisplayName, &p.GamesPlayed, &p.GamesWon, &p.AvatarID); err != nil {
 			return nil, err
 		}
 		profiles = append(profiles, p)

@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"chal-jhootha-server/internal/auth"
+	"chal-jhootha-server/internal/live"
 	"chal-jhootha-server/internal/logger"
 	"chal-jhootha-server/internal/metrics"
 	"chal-jhootha-server/internal/room"
@@ -36,11 +37,17 @@ func main() {
 	}
 	defer st.Close()
 
+	liveRuntime, err := live.Open(context.Background(), os.Getenv("REDIS_URL"))
+	if err != nil {
+		log.Fatalf("open redis runtime: %v", err)
+	}
+	defer liveRuntime.Close()
+
 	runtimeCtx, stopRuntime := context.WithCancel(context.Background())
 	defer stopRuntime()
 
-	authSvc := &auth.Service{Store: st}
-	rm := room.NewManager(st)
+	rm := room.NewManager(st, liveRuntime)
+	authSvc := &auth.Service{Store: st, Runtime: liveRuntime, Rooms: rm}
 	rm.Restore()
 	rm.StartPersistenceWorker(runtimeCtx)
 	rm.StartJanitor(runtimeCtx)
@@ -54,7 +61,7 @@ func main() {
 
 	health := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if err := st.Ping(r.Context()); err != nil {
+		if err := st.Ping(r.Context()); err != nil || liveRuntime.Ping(r.Context()) != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_, _ = w.Write([]byte(`{"status":"unavailable"}`))
 			return
@@ -71,6 +78,7 @@ func main() {
 	r.Post("/api/auth/register", authSvc.HandleRegister)
 	r.Post("/api/auth/login", authSvc.HandleLogin)
 	r.Post("/api/auth/guest", authSvc.HandleGuest)
+	r.Post("/api/auth/guest/clear", authSvc.HandleClearGuest)
 	r.Post("/api/auth/logout", authSvc.HandleLogout)
 	r.Post("/api/auth/ws-ticket", authSvc.HandleWsTicket)
 	r.Get("/api/auth/session", authSvc.HandleSession)
@@ -78,12 +86,17 @@ func main() {
 	r.Get("/api/profile/me", authSvc.HandleMyProfile)
 	r.Post("/api/profile/me", authSvc.HandleCreateProfile)
 	r.Patch("/api/profile/me", authSvc.HandleUpdateProfile)
+	r.Post("/api/profile/me/password", authSvc.HandleUpdatePassword)
 	r.Get("/api/profiles/{handle}", authSvc.HandlePublicProfile)
 	r.Get("/api/friends", authSvc.HandleFriendships)
 	r.Post("/api/friends/requests", authSvc.HandleCreateFriendRequest)
 	r.Post("/api/friends/requests/{id}/accept", authSvc.HandleFriendResponse(true))
 	r.Post("/api/friends/requests/{id}/decline", authSvc.HandleFriendResponse(false))
 	r.Delete("/api/friends/{id}", authSvc.HandleRemoveFriendship)
+	r.Get("/api/room-invites", authSvc.HandleRoomInvites)
+	r.Post("/api/room-invites", authSvc.HandleCreateRoomInvite)
+	r.Post("/api/room-invites/{token}/accept", authSvc.HandleRoomInviteResponse(true))
+	r.Post("/api/room-invites/{token}/decline", authSvc.HandleRoomInviteResponse(false))
 	r.Get("/api/players/recent", authSvc.HandleRecentPlayers)
 
 	r.HandleFunc("/ws", transport.HandleWebSocket(rm, authSvc, origins))

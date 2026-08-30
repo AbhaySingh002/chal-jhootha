@@ -71,6 +71,13 @@ func TestIsBluff(t *testing.T) {
 	assert.True(t, IsBluff([]ws.Card{{Rank: "A"}, {Rank: "K"}}, "A"))
 }
 
+func TestIsClaimBluffForComboClaims(t *testing.T) {
+	claims := []ws.ClaimGroup{{Rank: "A", Count: 2}, {Rank: "K", Count: 1}}
+	assert.False(t, IsClaimBluff([]ws.Card{{Rank: "K"}, {Rank: "A"}, {Rank: "A"}}, claims))
+	assert.True(t, IsClaimBluff([]ws.Card{{Rank: "K"}, {Rank: "A"}, {Rank: "Q"}}, claims), "one mismatch sinks the entire combo")
+	assert.True(t, IsClaimBluff([]ws.Card{{Rank: "A"}, {Rank: "K"}}, claims), "visible count must match all claim groups")
+}
+
 func TestDealLeftoversAndUniqueIDs(t *testing.T) {
 	deck := GenerateDecks(1)
 	assert.Equal(t, 52, len(deck))

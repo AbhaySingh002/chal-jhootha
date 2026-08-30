@@ -22,6 +22,7 @@ import {
   removeFriendship,
   respondToFriendRequest,
   updateMyProfile,
+  updateMyPassword,
   type Friendship,
   type FriendshipState,
   type PlayerProfile,
@@ -54,6 +55,9 @@ export const Profile: React.FC = () => {
   const [recentPlayers, setRecentPlayers] = useState<PlayerProfile[]>([]);
   const [handle, setHandle] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [avatarId, setAvatarId] = useState('ace-spades');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [searchHandle, setSearchHandle] = useState('');
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
   const [error, setError] = useState('');
@@ -80,6 +84,7 @@ export const Profile: React.FC = () => {
         if (mine.profile) {
           setHandle(mine.profile.handle);
           setDisplayName(mine.profile.displayName);
+          setAvatarId(mine.profile.avatarId);
           const [friendData, recentData] = await Promise.all([
             getFriendships(),
             getRecentPlayers(),
@@ -112,11 +117,12 @@ export const Profile: React.FC = () => {
     setSuccessMsg('');
     try {
       const result = profile
-        ? await updateMyProfile(handle, displayName)
+        ? await updateMyProfile(handle, displayName, avatarId)
         : await createMyProfile(handle);
       setProfile(result.profile);
       setHandle(result.profile.handle);
       setDisplayName(result.profile.displayName);
+      setAvatarId(result.profile.avatarId);
       setSuccessMsg('Profile updated successfully.');
       setTimeout(() => setSuccessMsg(''), 3000);
       if (!profile) refreshSocial();
@@ -124,6 +130,20 @@ export const Profile: React.FC = () => {
       setError(cause instanceof Error ? cause.message : 'Failed to save profile.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const changePassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    setSuccessMsg('');
+    try {
+      await updateMyPassword(currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setSuccessMsg('Password updated. Other sessions were signed out.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to update password.');
     }
   };
 
@@ -377,6 +397,27 @@ export const Profile: React.FC = () => {
                   </div>
                 )}
 
+                {profile && (
+                  <div>
+                    <label htmlFor="profile-avatar" className="mb-1 block font-mono text-xs font-bold uppercase tracking-[0.1em]">
+                      Deck Avatar
+                    </label>
+                    <select
+                      id="profile-avatar"
+                      value={avatarId}
+                      onChange={(event) => setAvatarId(event.target.value)}
+                      className="brutal-input min-h-11 text-sm"
+                    >
+                      <option value="ace-spades">Ace of Spades</option>
+                      <option value="king-hearts">King of Hearts</option>
+                      <option value="queen-diamonds">Queen of Diamonds</option>
+                      <option value="jack-clubs">Jack of Clubs</option>
+                      <option value="joker-red">Red Joker</option>
+                      <option value="joker-black">Black Joker</option>
+                    </select>
+                  </div>
+                )}
+
                 <div className="sm:col-span-2">
                   <button
                     type="submit"
@@ -388,6 +429,18 @@ export const Profile: React.FC = () => {
                 </div>
               </form>
             </section>
+
+            {profile && (
+              <section className="brutal-card p-5 sm:p-7">
+                <h2 className="font-display text-2xl uppercase tracking-tight">Password</h2>
+                <p className="mt-1 font-mono text-xs text-ink-muted">Changing it signs out your other devices.</p>
+                <form onSubmit={changePassword} className="mt-5 grid gap-4 border-t-2 border-ink pt-4 sm:grid-cols-2">
+                  <input aria-label="Current password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="brutal-input text-sm" placeholder="Current password" autoComplete="current-password" required />
+                  <input aria-label="New password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="brutal-input text-sm" placeholder="New password (6+ characters)" minLength={6} autoComplete="new-password" required />
+                  <button type="submit" className="brutal-btn bg-ink text-paper sm:col-span-2">Update Password</button>
+                </form>
+              </section>
+            )}
           </div>
         )}
 

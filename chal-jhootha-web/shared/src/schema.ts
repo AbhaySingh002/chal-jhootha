@@ -1,8 +1,12 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = '1.0.0';
+export const PROTOCOL_VERSION = '2.0.0';
 
 export const RankSchema = z.enum(['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']);
+export const ClaimGroupSchema = z.object({
+  rank: RankSchema,
+  count: z.number().int().positive(),
+});
 
 const BaseClientEvent = z.object({
   clientMsgId: z.string(),
@@ -38,7 +42,8 @@ export const StartGameSchema = BaseClientEvent.extend({
 export const PlayCardsSchema = BaseClientEvent.extend({
   type: z.literal('play_cards'),
   cardIds: z.array(z.string()).min(1),
-  claimedRank: RankSchema.optional(), // Required if opener
+  claims: z.array(ClaimGroupSchema).min(1).optional(),
+  claimedRank: RankSchema.optional(), // v1-compatible plain opening
   expectedSeq: z.number(), // Concurrency guard
 });
 
@@ -64,6 +69,14 @@ export const ResetToLobbySchema = BaseClientEvent.extend({
   type: z.literal('reset_to_lobby'),
 });
 
+export const LeaveRoomSchema = BaseClientEvent.extend({
+  type: z.literal('leave_room'),
+});
+
+export const DestroyRoomSchema = BaseClientEvent.extend({
+  type: z.literal('destroy_room'),
+});
+
 export const VoiceSignalSchema = BaseClientEvent.extend({
   type: z.literal('voice_signal'),
   targetUserId: z.string().optional(),
@@ -87,6 +100,8 @@ export const ClientEventSchema = z.discriminatedUnion('type', [
   HeartbeatSchema,
   SyncStateSchema,
   ResetToLobbySchema,
+  LeaveRoomSchema,
+  DestroyRoomSchema,
   VoiceSignalSchema,
   ReactionSchema,
 ]);
@@ -102,4 +117,6 @@ export type HeartbeatEvent = z.infer<typeof HeartbeatSchema>;
 export type SetConfigEvent = z.infer<typeof SetConfigSchema>;
 export type SyncStateEvent = z.infer<typeof SyncStateSchema>;
 export type ResetToLobbyEvent = z.infer<typeof ResetToLobbySchema>;
+export type LeaveRoomEvent = z.infer<typeof LeaveRoomSchema>;
+export type DestroyRoomEvent = z.infer<typeof DestroyRoomSchema>;
 export type ReactionInputEvent = z.infer<typeof ReactionSchema>;

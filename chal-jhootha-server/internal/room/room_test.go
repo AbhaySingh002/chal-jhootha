@@ -272,7 +272,7 @@ func TestPendingFinishAndWinnerCount(t *testing.T) {
 	assert.Equal(t, 1, state.WinnerCount)
 }
 
-func TestWinnerCountLocksAcrossLobbyReplayAndSnapshot(t *testing.T) {
+func TestWinnerCountUnlocksWhenReturningToLobby(t *testing.T) {
 	r := room.NewRoom("LOCKED", nil)
 	defer close(r.CloseReq)
 	a, _, outA := join(t, r, "ua", "A", "ca")
@@ -304,24 +304,25 @@ func TestWinnerCountLocksAcrossLobbyReplayAndSnapshot(t *testing.T) {
 	var replayLobby ws.RoomStateEvent
 	require.NoError(t, json.Unmarshal(roomState, &replayLobby))
 	require.Equal(t, 2, replayLobby.WinnerCount)
-	require.True(t, replayLobby.WinnerCountLocked)
+	require.False(t, replayLobby.WinnerCountLocked)
 
 	r.Inbox <- room.RoomMessage{
 		ConnectionID: "ca", PlayerID: a,
 		Event: &ws.SetConfigEvent{BaseClientEvent: ws.BaseClientEvent{ClientMsgID: "raise-locked", Type: "set_config"}, DeckCount: 3, WinnerCount: 1},
 	}
-	errRaw := waitType(t, outA, "error")
-	var errEvent ws.ErrorEvent
-	require.NoError(t, json.Unmarshal(errRaw, &errEvent))
-	require.Equal(t, "WINNER_COUNT_LOCKED", errEvent.Code)
+	roomState = waitType(t, outA, "room_state")
+	var reconfigured ws.RoomStateEvent
+	require.NoError(t, json.Unmarshal(roomState, &reconfigured))
+	require.Equal(t, 3, reconfigured.DeckCount)
+	require.Equal(t, 1, reconfigured.WinnerCount)
 
 	raw, err := r.MarshalSnapshot()
 	require.NoError(t, err)
 	restored, err := room.RestoreRoom(raw, nil)
 	require.NoError(t, err)
 	defer close(restored.CloseReq)
-	require.True(t, restored.State.WinnerCountLocked)
-	require.Equal(t, 2, restored.State.WinnerCount)
+	require.False(t, restored.State.WinnerCountLocked)
+	require.Equal(t, 1, restored.State.WinnerCount)
 }
 
 func TestSnapshotRestore(t *testing.T) {
@@ -368,6 +369,45 @@ func TestRoomManagerJanitor(t *testing.T) {
 	assert.NotNil(t, r)
 	rm.DeleteRoom("ROOM1")
 	assert.False(t, rm.HasRoom("ROOM1"))
+}
+
+func TestDeleteRoomDiscardsQueuedSnapshot(t *testing.T) {
+	st := teststore.Open(t)
+	m := room.NewManager(st)
+	r := m.GetOrCreateRoom("DELETE_QUEUE")
+	_, _, _ = join(t, r, "delete-user", "DELETE", "delete-conn")
+
+	// Do not start the persistence worker yet: the join has queued a snapshot,
+	// mirroring a snapshot that was queued just before the final player left.
+	m.DeleteRoom("DELETE_QUEUE")
+	require.NoError(t, m.FlushPersistence(context.Background()))
+
+	rows, err := st.LoadAllRooms()
+	require.NoError(t, err)
+	for _, row := range rows {
+		assert.NotEqual(t, "DELETE_QUEUE", row.Code)
+	}
+}
+
+func TestExplicitLobbyLeaveTransfersHost(t *testing.T) {
+	r := room.NewRoom("LEAVE", nil)
+	defer close(r.CloseReq)
+	a, _, outA := join(t, r, "ua", "A", "ca")
+	b, _, outB := join(t, r, "ub", "B", "cb")
+	drain(outA)
+	drain(outB)
+
+	r.Inbox <- room.RoomMessage{ConnectionID: "ca", PlayerID: a, ClientMsg: "leave", Event: &ws.LeaveRoomEvent{BaseClientEvent: ws.BaseClientEvent{ClientMsgID: "leave", Type: "leave_room"}}}
+	left := waitType(t, outA, "room_left")
+	var leftEvent ws.RoomLeftEvent
+	require.NoError(t, json.Unmarshal(left, &leftEvent))
+	assert.Equal(t, "LEAVE", leftEvent.RoomCode)
+
+	roomState := waitType(t, outB, "room_state")
+	var state ws.RoomStateEvent
+	require.NoError(t, json.Unmarshal(roomState, &state))
+	assert.Equal(t, b, state.HostID)
+	assert.Len(t, state.Players, 1)
 }
 
 func TestSkipAroundBurn(t *testing.T) {

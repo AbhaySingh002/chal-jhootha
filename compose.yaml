@@ -15,11 +15,25 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - redis_data:/data
+
   api:
     build:
       context: ./chal-jhootha-server
     environment:
       DATABASE_URL: postgres://chal_jhootha:chal_jhootha_dev@postgres:5432/chal_jhootha?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
       FRONTEND_ORIGINS: http://localhost:5173
       ROOM_IDLE_TTL: 24h
       GUEST_SESSION_SECRET: local-development-only-change-me
@@ -30,6 +44,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   postgres_data:
+  redis_data:

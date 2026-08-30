@@ -8,6 +8,7 @@ export type AuthUser = {
   isRegistered: boolean;
   handle?: string;
   hasProfile: boolean;
+  avatarId?: string;
 };
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
@@ -20,13 +21,17 @@ async function parse(res: Response) {
   return data as { user?: AuthUser | null; activeRoomCode?: string; error?: string; ticket?: string; expiresIn?: number; iceServers?: IceServer[] };
 }
 
-export async function ensureGuest(name?: string) {
+export async function ensureGuest(name?: string, forceNew = false) {
   return parse(await fetch(apiURL('/api/auth/guest'), {
     method: 'POST',
     credentials: 'include',
     headers: jsonHeaders,
-    body: JSON.stringify({ name: name || 'GUEST' }),
+    body: JSON.stringify({ name: name || '', forceNew }),
   }));
+}
+
+export async function clearGuest() {
+  await fetch(apiURL('/api/auth/guest/clear'), { method: 'POST', credentials: 'include' });
 }
 
 export async function login(email: string, password: string) {

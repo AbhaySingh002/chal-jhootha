@@ -13,7 +13,6 @@ type Snapshot struct {
 	State            ws.GameState         `json:"state"`
 	Hands            map[string][]ws.Card `json:"hands"`
 	Stack            []ws.Card            `json:"stack"`
-	TopPlayCount     int                  `json:"topPlayCount"`
 	MatchID          string               `json:"matchId,omitempty"`
 	RejoinTokens     map[string]string    `json:"rejoinTokens"`
 	StartedAtUnix    *int64               `json:"startedAtUnix,omitempty"`
@@ -32,7 +31,6 @@ func (r *Room) MarshalSnapshot() ([]byte, error) {
 		State:            r.State,
 		Hands:            r.playerHands,
 		Stack:            r.stack,
-		TopPlayCount:     r.topPlayCount,
 		MatchID:          r.matchID,
 		RejoinTokens:     r.rejoinTokens,
 		StartedAtUnix:    started,
@@ -55,7 +53,6 @@ func RestoreRoom(raw []byte, persistFn func(*Room)) (*Room, error) {
 	if s.Stack != nil {
 		r.stack = s.Stack
 	}
-	r.topPlayCount = s.TopPlayCount
 	r.matchID = s.MatchID
 	if s.RejoinTokens != nil {
 		r.rejoinTokens = s.RejoinTokens

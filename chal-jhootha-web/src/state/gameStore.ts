@@ -1,12 +1,12 @@
 import { create } from 'zustand';
-import type { ConnectionStatus, GameState, ServerEvent, Card, PlayerRole } from 'shared';
+import type { ConnectionStatus, GameState, ServerEvent, Card, ClaimGroup, PlayerRole } from 'shared';
 import { PROTOCOL_VERSION } from 'shared';
-import { sendEvent, connectSocket } from '../ws/socket';
-import { ensureGuest } from '../lib/auth';
+import { sendEvent, connectSocket, disconnectSocket } from '../ws/socket';
+import { clearGuest, ensureGuest } from '../lib/auth';
 
 type PendingAction = {
   clientMsgId: string;
-  type: 'start_game' | 'reset_to_lobby' | 'set_config' | 'play_cards' | 'challenge' | 'skip';
+  type: 'start_game' | 'reset_to_lobby' | 'set_config' | 'play_cards' | 'challenge' | 'skip' | 'leave_room' | 'destroy_room';
   startedAt: number;
 };
 
@@ -32,9 +32,11 @@ interface GameStore {
   startGame: () => void;
   resetToLobby: () => void;
   setConfig: (deckCount: number, winnerCount: number) => void;
-  playCards: (cardIds: string[], claimedRank?: string) => void;
+  playCards: (cardIds: string[], claims?: ClaimGroup[]) => void;
   challenge: () => void;
   skip: () => void;
+  leaveRoom: () => void;
+  destroyRoom: () => void;
   requestSync: () => void;
   sendVoice: (kind: string, payload?: unknown, targetUserId?: string) => void;
   sendReaction: (emoji: string) => void;
@@ -75,10 +77,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   yourRole: null,
 
   joinRoom: async (roomCode, playerName) => {
-    await ensureGuest(playerName);
     const existingToken = sessionStorage.getItem('rejoinToken');
     const existingRoom = sessionStorage.getItem('roomCode');
     const isRejoiningSameRoom = existingRoom === roomCode && !!existingToken;
+    await ensureGuest(playerName, !isRejoiningSameRoom);
     if (isRejoiningSameRoom) {
       set({ roomCode, lastError: null });
     } else {
@@ -99,7 +101,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   createRoom: async (playerName, deckCount = 1, winnerCount = 1) => {
-    await ensureGuest(playerName);
+    await ensureGuest(playerName, true);
     sessionStorage.removeItem('playerId');
     sessionStorage.removeItem('roomCode');
     sessionStorage.removeItem('rejoinToken');
@@ -139,7 +141,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
-  playCards: (cardIds, claimedRank) => {
+  playCards: (cardIds, claims) => {
     const { lastSeq, connectionStatus, youAreController, yourRole, pendingAction } = get();
     if (connectionStatus !== 'CONNECTED' || !youAreController || yourRole === 'winner_spectator' || pendingAction) return;
     const clientMsgId = crypto.randomUUID();
@@ -147,7 +149,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     sendEvent({
       type: 'play_cards',
       cardIds,
-      claimedRank: claimedRank as any,
+      claims,
       expectedSeq: lastSeq,
       clientMsgId,
       protocolVersion: PROTOCOL_VERSION,
@@ -178,6 +180,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
       clientMsgId,
       protocolVersion: PROTOCOL_VERSION,
     });
+  },
+
+  leaveRoom: () => {
+    const { connectionStatus, pendingAction } = get();
+    if (connectionStatus !== 'CONNECTED' || pendingAction) return;
+    const clientMsgId = crypto.randomUUID();
+    set({ pendingAction: { clientMsgId, type: 'leave_room', startedAt: Date.now() }, lastError: null });
+    sendEvent({ type: 'leave_room', clientMsgId, protocolVersion: PROTOCOL_VERSION });
+  },
+
+  destroyRoom: () => {
+    const { connectionStatus, pendingAction } = get();
+    if (connectionStatus !== 'CONNECTED' || pendingAction) return;
+    const clientMsgId = crypto.randomUUID();
+    set({ pendingAction: { clientMsgId, type: 'destroy_room', startedAt: Date.now() }, lastError: null });
+    sendEvent({ type: 'destroy_room', clientMsgId, protocolVersion: PROTOCOL_VERSION });
   },
 
   requestSync: () => {
@@ -287,6 +305,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             deckCount: event.deckCount ?? state.gameState?.deckCount ?? 1,
             winnerCount: event.winnerCount ?? state.gameState?.winnerCount ?? 1,
             winnerCountLocked: event.winnerCountLocked ?? state.gameState?.winnerCountLocked ?? false,
+            lastMatch: event.lastMatch ?? state.gameState?.lastMatch ?? null,
           },
         });
         break;
@@ -314,12 +333,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
               claimedRank: event.claimedRank as any,
               currentTurnPlayerId: event.currentTurnPlayerId,
               lastAction: event.lastAction,
+              topPlay: event.topPlay ?? safe.topPlay ?? null,
               roundOpenerId: event.roundOpenerId,
               winners: event.winners ?? safe.winners,
               deckCount: event.deckCount ?? safe.deckCount,
               winnerCount: event.winnerCount ?? safe.winnerCount,
               winnerCountLocked: event.winnerCountLocked ?? safe.winnerCountLocked,
               pendingFinishId: event.pendingFinishId,
+              lastMatch: event.lastMatch ?? safe.lastMatch ?? null,
             },
             handsCount: event.hands || {},
             myHand: event.yourHand || [],
@@ -372,6 +393,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
             players: state.gameState.players.map((player) => player.id === event.playerId ? { ...player, isAbandoned: true, role: 'abandoned' } : player),
           } : null,
         });
+        break;
+      case 'room_left':
+      case 'room_destroyed':
+        disconnectSocket();
+        get().resetSession();
+        void clearGuest();
         break;
       case 'device_superseded':
         set({ youAreController: false });

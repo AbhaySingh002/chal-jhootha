@@ -1,4 +1,4 @@
-import type { Card, GameState, Player, PlayerRole } from './types';
+import type { Card, GameState, LastMatchSummary, Player, PlayerRole, TopPlay } from './types';
 
 export interface BaseServerEvent {
   seq: number;
@@ -12,6 +12,7 @@ export interface RoomStateEvent extends BaseServerEvent {
   deckCount?: number;
   winnerCount?: number;
   winnerCountLocked?: boolean;
+  lastMatch?: LastMatchSummary | null;
 }
 
 export interface GameStateEvent extends BaseServerEvent {
@@ -25,6 +26,7 @@ export interface GameStateEvent extends BaseServerEvent {
   claimedRank: string | null;
   currentTurnPlayerId: string | null;
   lastAction: GameState['lastAction'];
+  topPlay?: TopPlay | null;
   roundOpenerId: string | null;
   winners?: string[];
   deckCount?: number;
@@ -33,6 +35,7 @@ export interface GameStateEvent extends BaseServerEvent {
   pendingFinishId?: string | null;
   youAreController?: boolean;
   yourRole?: PlayerRole;
+  lastMatch?: LastMatchSummary | null;
 }
 
 export interface ChallengeResultEvent extends BaseServerEvent {
@@ -101,6 +104,16 @@ export interface PlayerAbandonedEvent extends BaseServerEvent {
   playerId: string;
 }
 
+export interface RoomLeftEvent extends BaseServerEvent {
+  type: 'room_left';
+  roomCode: string;
+}
+
+export interface RoomDestroyedEvent extends BaseServerEvent {
+  type: 'room_destroyed';
+  roomCode: string;
+}
+
 export interface DeviceSupersededEvent extends BaseServerEvent {
   type: 'device_superseded';
   reason: string;
@@ -135,6 +148,8 @@ export type ServerEvent =
   | PlayerDisconnectedEvent
   | PlayerReconnectedEvent
   | PlayerAbandonedEvent
+  | RoomLeftEvent
+  | RoomDestroyedEvent
   | DeviceSupersededEvent
   | VoiceSignalEvent
   | ReactionEvent;
