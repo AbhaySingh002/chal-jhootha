@@ -3,8 +3,9 @@ import { useLocation, useParams } from 'wouter';
 import { Shield, UserCheck, UserPlus } from 'lucide-react';
 import { useSession } from '../lib/auth';
 import {
-  createFriendRequest,
   getPublicProfile,
+  calculateWinRate,
+  useFriendRequest,
   type FriendshipState,
   type PlayerProfile,
 } from '../lib/profile';
@@ -17,7 +18,7 @@ export const PublicProfile: React.FC = () => {
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [friendshipState, setFriendshipState] = useState<FriendshipState>('none');
   const [error, setError] = useState('');
-  const [isRequesting, setIsRequesting] = useState(false);
+  const { requestFriend: sendFriendRequest, isRequesting, error: requestError, setError: setRequestError } = useFriendRequest();
 
   useEffect(() => {
     if (isPending || !handle) return;
@@ -38,16 +39,10 @@ export const PublicProfile: React.FC = () => {
 
   const requestFriend = async () => {
     if (!profile) return;
-    setIsRequesting(true);
-    setError('');
-    try {
-      await createFriendRequest(profile.userId);
+    setRequestError('');
+    await sendFriendRequest(profile.userId, () => {
       setFriendshipState('outgoing');
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to send friend request.');
-    } finally {
-      setIsRequesting(false);
-    }
+    });
   };
 
   if (isPending || (!profile && !error)) {
@@ -82,10 +77,7 @@ export const PublicProfile: React.FC = () => {
     );
   }
 
-  const rate =
-    profile.gamesPlayed === 0
-      ? '0%'
-      : `${Math.round((profile.gamesWon / profile.gamesPlayed) * 100)}%`;
+  const rate = calculateWinRate(profile.gamesPlayed, profile.gamesWon);
 
   return (
     <div className="page-shell">
@@ -185,9 +177,9 @@ export const PublicProfile: React.FC = () => {
             )}
           </div>
 
-          {error && (
-            <p role="alert" className="mt-4 border-2 border-ink bg-evidence-red p-3 font-mono text-xs font-bold text-white">
-              {error}
+          {(error || requestError) && (
+            <p role="alert" className="mb-6 border-3 border-ink bg-evidence-red p-3 text-center font-mono text-sm font-bold text-white shadow-[4px_4px_0_var(--color-ink)]">
+              {error || requestError}
             </p>
           )}
         </section>

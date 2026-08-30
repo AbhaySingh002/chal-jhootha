@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { signOut, useSession } from '../lib/auth';
 import {
-  createFriendRequest,
   createMyProfile,
   getFriendships,
   getMyProfile,
@@ -24,6 +23,8 @@ import {
   respondToFriendRequest,
   updateMyProfile,
   updateMyPassword,
+  calculateWinRate,
+  useFriendRequest,
   type Friendship,
   type FriendshipState,
   type PlayerProfile,
@@ -33,11 +34,7 @@ import { Navbar } from '../components/Navbar';
 type TabType = 'overview' | 'friends' | 'find';
 type SearchResult = { profile: PlayerProfile; friendshipState: FriendshipState };
 
-function winRate(profile: PlayerProfile) {
-  return profile.gamesPlayed === 0
-    ? '0%'
-    : `${Math.round((profile.gamesWon / profile.gamesPlayed) * 100)}%`;
-}
+
 
 export const Profile: React.FC = () => {
   const { data: session, isPending } = useSession();
@@ -63,6 +60,7 @@ export const Profile: React.FC = () => {
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const { requestFriend: sendFriendRequest, error: requestError, setError: setRequestError } = useFriendRequest();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -153,6 +151,7 @@ export const Profile: React.FC = () => {
     if (!searchHandle.trim()) return;
     setIsSearching(true);
     setError('');
+    setRequestError('');
     try {
       const res = await getPublicProfile(searchHandle.trim().toLowerCase());
       setSearchResult(res);
@@ -166,19 +165,17 @@ export const Profile: React.FC = () => {
 
   const requestFriend = async (targetUserId: string) => {
     setError('');
-    try {
-      await createFriendRequest(targetUserId);
+    await sendFriendRequest(targetUserId, () => {
       if (searchResult?.profile.userId === targetUserId) {
         setSearchResult({ ...searchResult, friendshipState: 'outgoing' });
       }
       refreshSocial();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to send friend request.');
-    }
+    });
   };
 
   const respondToRequest = async (id: string, accept: boolean) => {
     setError('');
+    setRequestError('');
     try {
       await respondToFriendRequest(id, accept);
       refreshSocial();
@@ -310,9 +307,9 @@ export const Profile: React.FC = () => {
           </div>
         </div>
 
-        {error && (
-          <p role="alert" className="border-2 border-ink bg-evidence-red p-3 font-mono text-xs font-bold text-white shadow-[2px_2px_0_var(--color-ink)]">
-            {error}
+        {(error || requestError) && (
+          <p role="alert" className="mb-6 border-3 border-ink bg-evidence-red p-3 text-center font-mono text-sm font-bold text-white shadow-[4px_4px_0_var(--color-ink)]">
+            {error || requestError}
           </p>
         )}
 
@@ -352,7 +349,7 @@ export const Profile: React.FC = () => {
                   </span>
                   <div className="mt-2 flex items-baseline gap-2">
                     <Flame size={20} className="text-evidence-red" strokeWidth={2.5} />
-                    <span className="font-display text-3xl sm:text-4xl">{winRate(profile)}</span>
+                    <span className="font-display text-3xl sm:text-4xl">{calculateWinRate(profile.gamesPlayed, profile.gamesWon)}</span>
                   </div>
                 </div>
               </section>
@@ -550,7 +547,7 @@ export const Profile: React.FC = () => {
                           @{f.profile.handle}
                         </button>
                         <span className="font-mono text-[10px] text-ink-muted">
-                          {f.profile.gamesWon} wins • {winRate(f.profile)}
+                          {f.profile.gamesWon} wins • {calculateWinRate(f.profile.gamesPlayed, f.profile.gamesWon)}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -695,7 +692,7 @@ export const Profile: React.FC = () => {
                             @{player.handle}
                           </button>
                           <span className="font-mono text-[10px] text-ink-muted">
-                            {player.gamesWon} wins • {winRate(player)}
+                            {player.gamesWon} wins • {calculateWinRate(player.gamesPlayed, player.gamesWon)}
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">

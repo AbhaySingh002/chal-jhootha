@@ -29,7 +29,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = 'play' }) => {
       }).catch(() => {});
     };
     refresh();
-    const timer = window.setInterval(refresh, 10_000);
+    const timer = window.setInterval(refresh, 30_000);
     return () => {
       active = false;
       window.clearInterval(timer);

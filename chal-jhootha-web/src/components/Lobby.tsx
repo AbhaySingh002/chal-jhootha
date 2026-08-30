@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowLeft,
   Check,
@@ -47,7 +48,14 @@ export const Lobby: React.FC = () => {
     if (showFriendsDrawer && isRegistered) {
       getFriendships()
         .then((res) => {
-          setFriends(res.friendships.filter((f) => f.direction === 'friend'));
+          const accepted = res.friendships.filter((f) => f.direction === 'friend');
+          // Online friends first, then alphabetical by handle
+          accepted.sort((a, b) => {
+            if (a.online && !b.online) return -1;
+            if (!a.online && b.online) return 1;
+            return a.profile.handle.localeCompare(b.profile.handle);
+          });
+          setFriends(accepted);
         })
         .catch(() => {});
     }
@@ -379,69 +387,107 @@ export const Lobby: React.FC = () => {
         </aside>
       </main>
 
-      {/* Friends Quick Invite Drawer / Modal */}
-      {showFriendsDrawer && (
-        <div
-          className="lobby-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowFriendsDrawer(false);
-          }}
-        >
-          <div className="lobby-modal-dialog brutal-card w-full max-w-md p-5 sm:p-6 shadow-[6px_6px_0_var(--color-ink)]">
-            <div className="mb-4 flex items-center justify-between border-b-2 border-ink pb-2">
-              <h3 className="font-display text-xl uppercase">Invite Connected Friends</h3>
-              <button
-                type="button"
-                onClick={() => setShowFriendsDrawer(false)}
-                className="icon-btn h-11 w-11"
-                aria-label="Close friend invitations"
-              >
-                <X size={15} strokeWidth={2.5} />
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => void shareInviteLink()}
-              className="brutal-btn brutal-btn-compact mt-4 inline-flex items-center gap-1.5 bg-surface text-xs text-ink"
-            >
-              <Share2 size={14} strokeWidth={2.5} />
-              <span>Share room link</span>
-            </button>
-
-            {friends.length === 0 ? (
-              <div className="py-6 text-center">
-                <p className="font-mono text-xs text-ink-muted">No friends on your roster yet.</p>
-                <p className="mt-1 font-mono text-[11px] text-ink-muted">
-                  Search player handles in the Profile tab to add them.
-                </p>
+      {/* Friends Quick Invite Drawer */}
+      <AnimatePresence>
+        {showFriendsDrawer && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="lobby-modal-overlay fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink/60"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowFriendsDrawer(false);
+            }}
+          >
+            <motion.div
+              initial={{ y: "100%", opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: "100%", opacity: 0 }}
+              transition={{ type: 'spring', damping: 26, stiffness: 320 }}
+              className="lobby-invite-drawer brutal-card w-full max-w-md sm:m-4 shadow-[6px_6px_0_var(--color-ink)] flex flex-col" style={{ maxHeight: '80dvh' }}>
+              {/* Drawer header */}
+              <div className="flex items-center justify-between border-b-2 border-ink p-4 sm:p-5">
+                <div>
+                  <h3 className="font-display text-lg uppercase">Invite Friends</h3>
+                  <p className="mt-0.5 font-mono text-[10px] text-ink-muted">
+                    {friends.filter((f) => f.online).length} online · {friends.length} total
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowFriendsDrawer(false)}
+                  className="icon-btn h-10 w-10"
+                  aria-label="Close"
+                >
+                  <X size={15} strokeWidth={2.5} />
+                </button>
               </div>
-            ) : (
-              <ul className="max-h-60 space-y-2 overflow-y-auto pr-1">
-                {friends.map((f) => (
-                  <li
-                    key={f.id}
-                    className="flex items-center justify-between border border-ink bg-paper p-2.5 font-mono text-xs font-bold"
-                  >
-                    <span className="flex min-w-0 items-center gap-1.5 truncate">
-                      <span className={`h-2 w-2 shrink-0 rounded-full ${f.online ? 'bg-confirmed-green' : 'bg-ink/25'}`} aria-label={f.online ? 'Online' : 'Offline'} />
-                      @{f.profile.handle}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={!f.online}
-                      onClick={() => void handleInviteFriend(f.profile.userId, f.profile.displayName)}
-                      className="brutal-btn brutal-btn-compact text-[10px] bg-caution-yellow text-ink disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {f.online ? 'Invite' : 'Offline'}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
+
+              {/* Friends list */}
+              <div className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
+                {friends.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <p className="font-mono text-xs text-ink-muted">No friends on your roster yet.</p>
+                    <p className="mt-1 font-mono text-[10px] text-ink-muted">
+                      Add players from the Profile tab.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {friends.map((f) => (
+                      <li
+                        key={f.id}
+                        className={`flex items-center justify-between border-2 border-ink p-2.5 transition-opacity ${
+                          f.online ? 'bg-paper' : 'bg-surface opacity-55'
+                        }`}
+                      >
+                        <span className="flex min-w-0 items-center gap-2 truncate">
+                          <span
+                            className={`relative flex h-2.5 w-2.5 shrink-0 items-center justify-center rounded-full ${
+                              f.online ? 'bg-confirmed-green' : 'bg-ink/20'
+                            }`}
+                            aria-label={f.online ? 'Online' : 'Offline'}
+                          >
+                            {f.online && (
+                              <span className="absolute inset-0 animate-ping rounded-full bg-confirmed-green opacity-40" />
+                            )}
+                          </span>
+                          <span className="truncate font-mono text-xs font-bold">@{f.profile.handle}</span>
+                        </span>
+                        <button
+                          type="button"
+                          disabled={!f.online}
+                          onClick={() => void handleInviteFriend(f.profile.userId, f.profile.displayName)}
+                          className={`brutal-btn brutal-btn-compact shrink-0 text-[10px] ${
+                            f.online
+                              ? 'bg-caution-yellow text-ink'
+                              : 'cursor-not-allowed bg-surface text-ink-muted'
+                          }`}
+                        >
+                          {f.online ? 'Invite' : 'Offline'}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Footer: share link fallback */}
+              <div className="border-t-2 border-ink p-3 sm:p-4">
+                <button
+                  type="button"
+                  onClick={() => void shareInviteLink()}
+                  className="brutal-btn brutal-btn-compact inline-flex w-full items-center justify-center gap-1.5 bg-surface text-xs text-ink"
+                >
+                  <Share2 size={14} strokeWidth={2.5} />
+                  <span>Share room link instead</span>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

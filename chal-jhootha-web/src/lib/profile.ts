@@ -1,3 +1,6 @@
+import { apiURL } from './api';
+import { useState } from 'react';
+
 export type FriendshipState = 'none' | 'self' | 'friends' | 'incoming' | 'outgoing';
 
 export interface PlayerProfile {
@@ -7,6 +10,10 @@ export interface PlayerProfile {
   gamesPlayed: number;
   gamesWon: number;
   avatarId: string;
+}
+
+export function calculateWinRate(gamesPlayed: number, gamesWon: number): string {
+  return gamesPlayed === 0 ? '0%' : `${Math.round((gamesWon / gamesPlayed) * 100)}%`;
 }
 
 export interface Friendship {
@@ -114,4 +121,23 @@ export function respondToRoomInvite(token: string, accept: boolean) {
     method: 'POST',
   });
 }
-import { apiURL } from './api';
+
+export function useFriendRequest() {
+  const [error, setError] = useState('');
+  const [isRequesting, setIsRequesting] = useState(false);
+
+  const requestFriend = async (targetUserId: string, onSuccess?: () => void) => {
+    setIsRequesting(true);
+    setError('');
+    try {
+      await createFriendRequest(targetUserId);
+      onSuccess?.();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to send friend request.');
+    } finally {
+      setIsRequesting(false);
+    }
+  };
+
+  return { requestFriend, error, isRequesting, setError };
+}

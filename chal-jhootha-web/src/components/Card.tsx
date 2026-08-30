@@ -90,7 +90,7 @@ export const Card: React.FC<CardProps> = ({
             }
           : undefined
       }
-      whileTap={{ scale: 0.96 }}
+      whileTap={reduceMotion ? { scale: 0.96 } : { scale: 0.9, transition: { type: 'spring', stiffness: 400, damping: 12 } }}
       exit={{ opacity: 0, y: -100, scale: 0.8 }}
     >
       {faceDown || !card ? (

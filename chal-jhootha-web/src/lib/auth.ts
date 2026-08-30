@@ -75,8 +75,14 @@ export async function fetchVoiceIceServers(): Promise<IceServer[]> {
   return data.iceServers?.length ? data.iceServers : [{ urls: ['stun:stun.l.google.com:19302'] }];
 }
 
-export async function fetchSession() {
-  return parse(await fetch(apiURL('/api/auth/session'), { credentials: 'include', cache: 'no-store' }));
+let sessionPromise: ReturnType<typeof parse> | null = null;
+export function fetchSession() {
+  if (!sessionPromise) {
+    sessionPromise = fetch(apiURL('/api/auth/session'), { credentials: 'include', cache: 'no-store' })
+      .then(parse)
+      .finally(() => { sessionPromise = null; });
+  }
+  return sessionPromise;
 }
 
 export async function signOut() {

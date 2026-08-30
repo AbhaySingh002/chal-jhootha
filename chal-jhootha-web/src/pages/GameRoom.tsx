@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import type { Card as PlayingCard, GameState } from 'shared';
-import { ChevronUp, LogOut, Mic, MicOff, Radio, RotateCcw, SmilePlus, Volume2, VolumeX } from 'lucide-react';
+import { ChevronUp, LogOut, Mic, MicOff, Radio, RotateCcw, SmilePlus, Volume2, VolumeX, X } from 'lucide-react';
 import { useLocation, useParams } from 'wouter';
 import { useSession } from '../lib/auth';
 import { ActionBar } from '../components/ActionBar';
@@ -138,7 +138,8 @@ export const GameRoom: React.FC = () => {
   const [pendingName, setPendingName] = useState('');
   const [joinedName, setJoinedName] = useState<string | null>(null);
   const [connectionTimeout, setConnectionTimeout] = useState(false);
-  const [voiceError, setVoiceError] = useState('');
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [dismissedVoiceError, setDismissedVoiceError] = useState(false);
   const [reactions, setReactions] = useState<TableReaction[]>([]);
   const [reactionsOpen, setReactionsOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
@@ -208,6 +209,7 @@ export const GameRoom: React.FC = () => {
 
   useEffect(() => {
     if (hasAttemptedJoin.current && !roomCode && !gameState) {
+      useGameStore.setState({ lastError: 'Failed to join room.' });
       setLocation('/');
     }
   }, [gameState, roomCode, setLocation]);
@@ -331,16 +333,18 @@ export const GameRoom: React.FC = () => {
 
   const toggleSelect = (id: string) => {
     if (gameState?.phase !== 'playing' || !myHand.some((card) => card.id === id)) return;
-    setSelectedCards((cards) => {
-      const current = cards.filter((cardId) => myHand.some((card) => card.id === cardId));
-      return current.includes(id) ? current.filter((cardId) => cardId !== id) : [...current, id];
-    });
+    setSelectedCards(currentSelectedCards.includes(id) ? currentSelectedCards.filter((cardId) => cardId !== id) : [...currentSelectedCards, id]);
   };
 
   const voiceUnavailable = !!gameState && gameState.players.length > 8;
 
   const handleLeaveGame = () => {
-    leaveRoom();
+    if (connectionStatus !== 'CONNECTED') {
+      resetSession();
+      setLocation('/');
+    } else {
+      leaveRoom();
+    }
   };
 
   const sendTableReaction = (emoji: string) => {
@@ -473,10 +477,11 @@ export const GameRoom: React.FC = () => {
           ) : null}
         </div>
 
-        {voiceError && !voiceUnavailable ? (
-          <p role="alert" className="mt-2 max-w-lg border-2 border-ink bg-evidence-red p-2.5 text-center font-mono text-xs font-bold leading-5 text-white">
-            {voiceError}
-          </p>
+        {voiceError && !voiceUnavailable && !dismissedVoiceError ? (
+          <div role="alert" className="mt-2 max-w-lg border-2 border-ink bg-evidence-red p-2.5 flex items-center justify-between text-white shadow-[2px_2px_0_var(--color-ink)]">
+            <p className="font-mono text-xs font-bold leading-5">{voiceError}</p>
+            <button type="button" onClick={() => setDismissedVoiceError(true)} className="icon-btn h-8 w-8 ml-3 shrink-0 bg-ink text-evidence-red" aria-label="Dismiss voice error"><X size={15} strokeWidth={3} /></button>
+          </div>
         ) : null}
 
         <div ref={reactionDockRef} className="reaction-dock">
@@ -604,7 +609,7 @@ export const GameRoom: React.FC = () => {
                 onClick={handleLeaveGame}
                 className="brutal-btn bg-surface text-ink"
               >
-                Return to Lobby
+                Leave Room
               </button>
             </div>
           </section>

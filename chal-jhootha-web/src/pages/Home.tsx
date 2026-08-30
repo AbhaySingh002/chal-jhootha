@@ -234,8 +234,17 @@ export const Home: React.FC = () => {
             disabled={isCreating || (!isRegistered && !guestName.trim())}
             className="brutal-btn flex w-full items-center justify-center gap-2 bg-confirmed-green text-white transition-transform active:scale-[0.98]"
           >
-            <Plus size={18} strokeWidth={2.5} />
-            <span>{isCreating ? 'Creating Room...' : 'Create Room'}</span>
+            {isCreating ? (
+              <>
+                <div className="h-2 w-2 animate-pulse rounded-full bg-current" />
+                <span>Creating Room...</span>
+              </>
+            ) : (
+              <>
+                <Plus size={18} strokeWidth={2.5} />
+                <span>Create Room</span>
+              </>
+            )}
           </button>
 
           {createError || lastError ? (

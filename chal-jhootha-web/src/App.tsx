@@ -1,5 +1,13 @@
-import { lazy, Suspense } from 'react';
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
+import { useEffect, lazy, Suspense } from 'react';
+
+function ScrollToTop() {
+  const [location] = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location]);
+  return null;
+}
 
 const Home = lazy(() => import('./pages/Home').then(module => ({ default: module.Home })));
 const GameRoom = lazy(() => import('./pages/GameRoom').then(module => ({ default: module.GameRoom })));
@@ -11,6 +19,7 @@ function App() {
   return (
     <Suspense fallback={<div className="page-shell flex items-center justify-center min-h-screen text-sand font-mono uppercase text-xs">Loading...</div>}>
       <Switch>
+        <ScrollToTop />
         <Route path="/" component={Home} />
         <Route path="/room/:code" component={GameRoom} />
         <Route path="/auth" component={Auth} />

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import clsx from 'clsx';
-import { CircleHelp, Play, Plus, SkipForward, X } from 'lucide-react';
+import { CircleHelp, Play, Plus, SkipForward, X, Minus } from 'lucide-react';
 import type { ClaimGroup, Rank } from 'shared';
 import { useGameStore } from '../state/gameStore';
 
@@ -69,7 +69,11 @@ export const ActionBar: React.FC<{ selectedCards: string[]; clearSelection: () =
               <label className="sr-only" htmlFor={`claim-rank-${index}`}>Claimed rank {index + 1}</label>
               <select id={`claim-rank-${index}`} value={claim.rank} onChange={(event) => updateClaim(index, { rank: event.target.value as Rank })} className="brutal-select h-11 min-w-0 bg-surface font-display text-base"><option value="" disabled>Rank</option>{RANKS.map((rank) => <option key={rank} value={rank}>{rank}</option>)}</select>
               <label className="sr-only" htmlFor={`claim-count-${index}`}>Count for {claim.rank}</label>
-              <input id={`claim-count-${index}`} type="number" inputMode="numeric" min="1" max={selectedCards.length} value={claim.count} onChange={(event) => updateClaim(index, { count: Math.max(1, Number(event.target.value) || 1) })} className="brutal-input h-11 px-2 text-center" />
+              <div className="flex items-center brutal-input h-11 p-0 overflow-hidden bg-surface select-none">
+                <button type="button" disabled={claim.count <= 1} onClick={() => updateClaim(index, { count: Math.max(1, claim.count - 1) })} className="flex-1 flex justify-center items-center h-full hover:bg-paper disabled:opacity-30 border-r-2 border-ink active:bg-ink active:text-white" aria-label="Decrease count"><Minus size={16} strokeWidth={2.5} /></button>
+                <span id={`claim-count-${index}`} className="w-9 text-center font-mono font-bold">{claim.count}</span>
+                <button type="button" disabled={claim.count >= selectedCards.length} onClick={() => updateClaim(index, { count: Math.min(selectedCards.length, claim.count + 1) })} className="flex-1 flex justify-center items-center h-full hover:bg-paper disabled:opacity-30 border-l-2 border-ink active:bg-ink active:text-white" aria-label="Increase count"><Plus size={16} strokeWidth={2.5} /></button>
+              </div>
               {claims.length > 1 ? <button type="button" className="icon-btn h-11 w-11" onClick={() => setClaims((current) => current.filter((_, claimIndex) => claimIndex !== index))} aria-label={`Remove ${claim.rank} group`}><X size={18} strokeWidth={2.5} /></button> : <span className="w-11" />}
             </div>)}
           </div>
