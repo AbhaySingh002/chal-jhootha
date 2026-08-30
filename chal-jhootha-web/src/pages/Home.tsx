@@ -88,21 +88,71 @@ export const Home: React.FC = () => {
           <h1 className="home-title font-display text-[clamp(2.5rem,8.5vw,5.5rem)] leading-[0.88] tracking-[-0.05em] text-ink">
             <span className="hero-wordmark">
               <span aria-hidden="true" className="hero-dealer">
-                <svg className="hero-card-vector hero-card-vector--back" viewBox="0 0 32 44" focusable="false">
-                  <rect x="4" y="4" width="26" height="38" rx="3" fill="var(--color-ink)" />
-                  <rect x="2" y="2" width="28" height="40" rx="3" fill="var(--color-surface)" stroke="currentColor" strokeWidth="2.5" />
-                  <path d="M6 8h6v2H6z" fill="currentColor" />
-                  <path d="M16 13l4 5-4 5-4-5 4-5Z" fill="currentColor" />
-                  <path d="M16 26l4.5 5.5-4.5 5.5-4.5-5.5L16 26Z" fill="currentColor" />
+                <svg className="hero-card-vector hero-card-vector--back" viewBox="0 0 34 48" focusable="false" aria-hidden="true">
+                  {/* Shadow */}
+                  <rect x="2" y="2" width="30" height="44" rx="3.5" fill="var(--color-ink)" />
+                  {/* Surface */}
+                  <rect x="0" y="0" width="30" height="44" rx="3.5" fill="var(--color-surface)" stroke="var(--color-ink)" strokeWidth="2" />
+                  {/* Red Ornate Margin Frame */}
+                  <rect x="2.5" y="2.5" width="25" height="39" rx="2" fill="none" stroke="var(--color-evidence-red)" strokeWidth="0.75" strokeDasharray="2 1" />
+                  {/* Corner Pips & Indices */}
+                  <path d="M5.5 5.5l1.5 2-1.5 2-1.5-2z M24.5 5.5l1.5 2-1.5 2-1.5-2z M5.5 38.5l1.5 2-1.5 2-1.5-2z M24.5 38.5l1.5 2-1.5 2-1.5-2z" fill="var(--color-evidence-red)" />
+                  <text x="4.5" y="14" fontFamily="var(--font-display)" fontSize="5.5" fontWeight="900" fill="var(--color-evidence-red)" textAnchor="middle">K</text>
+                  <g transform="rotate(180 25.5 33)">
+                    <text x="25.5" y="35" fontFamily="var(--font-display)" fontSize="5.5" fontWeight="900" fill="var(--color-evidence-red)" textAnchor="middle">K</text>
+                  </g>
+                  {/* Starburst Rays */}
+                  <g stroke="var(--color-evidence-red)" strokeWidth="0.6" strokeOpacity="0.4" strokeLinecap="round">
+                    <line x1="15" y1="9" x2="15" y2="13" />
+                    <line x1="15" y1="31" x2="15" y2="35" />
+                    <line x1="4" y1="22" x2="8" y2="22" />
+                    <line x1="22" y1="22" x2="26" y2="22" />
+                    <line x1="7" y1="14" x2="10" y2="17" />
+                    <line x1="20" y1="27" x2="23" y2="30" />
+                    <line x1="7" y1="30" x2="10" y2="27" />
+                    <line x1="20" y1="17" x2="23" y2="14" />
+                  </g>
+                  {/* Center Diamond Emblem */}
+                  <path d="M15 13l6.5 9-6.5 9-6.5-9z" fill="none" stroke="var(--color-evidence-red)" strokeWidth="1.25" />
+                  <path d="M15 15l5 7-5 7-5-7z" fill="var(--color-evidence-red)" fillOpacity="0.15" stroke="var(--color-evidence-red)" strokeWidth="0.75" />
+                  <path d="M15 17.5l3.2 4.5-3.2 4.5-3.2-4.5z" fill="var(--color-evidence-red)" />
+                  <circle cx="15" cy="22" r="1" fill="var(--color-surface)" />
                 </svg>
-                <svg className="hero-card-vector hero-card-vector--front" viewBox="0 0 32 44" focusable="false">
-                  <rect x="4" y="4" width="26" height="38" rx="3" fill="var(--color-ink)" />
-                  <rect x="2" y="2" width="28" height="40" rx="3" fill="var(--color-surface)" stroke="currentColor" strokeWidth="2.5" />
-                  <path d="M6 8h6v2H6z" fill="currentColor" />
-                  <path d="M16 12c-2.6 3.1-6 5-6 8.1 0 2 1.4 3.4 3.3 3.4 1.2 0 2.1-.6 2.7-1.4l-1.2 4.7h2.4L16 22.1c.6.8 1.5 1.4 2.7 1.4 1.9 0 3.3-1.4 3.3-3.4C22 17 18.6 15.1 16 12Z" fill="currentColor" />
+                <svg className="hero-card-vector hero-card-vector--front" viewBox="0 0 34 48" focusable="false" aria-hidden="true">
+                  {/* Shadow */}
+                  <rect x="2" y="2" width="30" height="44" rx="3.5" fill="var(--color-ink)" />
+                  {/* Surface */}
+                  <rect x="0" y="0" width="30" height="44" rx="3.5" fill="var(--color-surface)" stroke="var(--color-ink)" strokeWidth="2" />
+                  {/* Micro Border & Corner Brackets */}
+                  <rect x="2.5" y="2.5" width="25" height="39" rx="2" fill="none" stroke="var(--color-ink)" strokeWidth="0.5" strokeOpacity="0.25" />
+                  <path d="M4 6.5h2.5 M4 6.5v2.5 M26 6.5h-2.5 M26 6.5v2.5 M4 37.5h2.5 M4 37.5v-2.5 M26 37.5h-2.5 M26 37.5v-2.5" stroke="var(--color-ink)" strokeWidth="0.75" strokeLinecap="round" />
+                  {/* Top-Left Corner Index */}
+                  <text x="5" y="9.5" fontFamily="var(--font-display)" fontSize="6" fontWeight="900" fill="var(--color-ink)" textAnchor="middle">A</text>
+                  <path d="M5 11c-.8 1.1-1.8 1.9-1.8 2.8 0 .8.6 1.3 1.3 1.3.4 0 .8-.2 1-.5.2.3.6.5 1 .5.7 0 1.3-.5 1.3-1.3 0-.9-1-1.7-1.8-2.8l-.5-.7z M4.6 14.8l-.3 1.4h1.4l-.3-1.4z" fill="var(--color-ink)" />
+                  {/* Bottom-Right Corner Index */}
+                  <g transform="rotate(180 25 36.5)">
+                    <text x="25" y="34" fontFamily="var(--font-display)" fontSize="6" fontWeight="900" fill="var(--color-ink)" textAnchor="middle">A</text>
+                    <path d="M25 35.5c-.8 1.1-1.8 1.9-1.8 2.8 0 .8.6 1.3 1.3 1.3.4 0 .8-.2 1-.5.2.3.6.5 1 .5.7 0 1.3-.5 1.3-1.3 0-.9-1-1.7-1.8-2.8l-.5-.7z M24.6 39.3l-.3 1.4h1.4l-.3-1.4z" fill="var(--color-ink)" />
+                  </g>
+                  {/* Radiating Accent Cross */}
+                  <g stroke="var(--color-caution-yellow)" strokeWidth="1" strokeLinecap="round">
+                    <line x1="15" y1="13" x2="15" y2="15" />
+                    <line x1="15" y1="29" x2="15" y2="31" />
+                    <line x1="6" y1="22" x2="8" y2="22" />
+                    <line x1="22" y1="22" x2="24" y2="22" />
+                  </g>
+                  {/* Centerpiece Ace of Spades */}
+                  <path d="M15 12c-3.8 4.2-6.5 6.8-6.5 10.5 0 2.8 2.1 4.8 4.8 4.8 1.3 0 2.5-.6 3.2-1.6l-1 4.3h3l-1-4.3c.7 1 1.9 1.6 3.2 1.6 2.7 0 4.8-2 4.8-4.8 0-3.7-2.7-6.3-6.5-10.5l-2-2.3z" fill="var(--color-ink)" />
+                  <path d="M15 13.8c-2.8 3.5-4.8 5.6-4.8 8.7 0 1.9 1.4 3.3 3.3 3.3.9 0 1.8-.4 2.3-1.1L15 13.8z" fill="var(--color-surface)" fillOpacity="0.22" />
+                  <path d="M15 19l2 3-2 3-2-3z" fill="var(--color-surface)" />
+                  <circle cx="15" cy="22" r="0.75" fill="var(--color-evidence-red)" />
                 </svg>
-                <svg className="hero-dealer-pip" viewBox="0 0 16 20" focusable="false">
-                  <path d="M8 1l7 9-7 9-7-9L8 1Z" fill="currentColor" />
+                <svg className="hero-dealer-pip" viewBox="0 0 18 22" focusable="false" aria-hidden="true">
+                  <path d="M10 2l6.5 8-6.5 9-6.5-9z" fill="var(--color-ink)" />
+                  <path d="M9 0l6.5 8-6.5 9-6.5-9z" fill="var(--color-evidence-red)" stroke="var(--color-ink)" strokeWidth="1.2" />
+                  <path d="M9 1.5l-4.8 6.5L9 15.2V1.5z" fill="rgba(255,255,255,0.4)" />
+                  <path d="M9 1.5v13.7l4.8-7.2L9 1.5z" fill="rgba(0,0,0,0.2)" />
+                  <polygon points="9,5 10.5,8 9,11 7.5,8" fill="var(--color-caution-yellow)" />
                 </svg>
               </span>
               <span className="hero-word">CHAL</span>
