@@ -17,8 +17,6 @@ export const Hand: React.FC<{ selectedCards: string[]; onSelect: (id: string) =>
   const [scrollState, setScrollState] = useState({ scrollLeft: 0, clientWidth: 0, isOverflowing: false });
   const [handDensity, setHandDensity] = useState<HandDensity>(getHandDensity);
   const scrollFrameRef = useRef<number | null>(null);
-  const dragRef = useRef<{ pointerId: number; startX: number; scrollLeft: number; didDrag: boolean } | null>(null);
-  const suppressClickRef = useRef(false);
 
   const total = myHand.length;
 
@@ -63,47 +61,6 @@ export const Hand: React.FC<{ selectedCards: string[]; onSelect: (id: string) =>
 
   const handleScroll = scheduleScrollState;
 
-  // Touch scroll remains native; mouse/pen get drag-to-scroll without turning a drag into a card selection.
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === 'touch' || e.button !== 0) return;
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    dragRef.current = { pointerId: e.pointerId, startX: e.clientX, scrollLeft: container.scrollLeft, didDrag: false };
-    container.setPointerCapture(e.pointerId);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== e.pointerId) return;
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const deltaX = e.clientX - drag.startX;
-    if (Math.abs(deltaX) > 5) {
-      drag.didDrag = true;
-      e.preventDefault();
-    }
-    if (drag.didDrag) container.scrollLeft = drag.scrollLeft - deltaX;
-  };
-
-  const finishPointerDrag = (e: React.PointerEvent<HTMLDivElement>, cancelled = false) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== e.pointerId) return;
-    suppressClickRef.current = !cancelled && drag.didDrag;
-    dragRef.current = null;
-    const container = scrollContainerRef.current;
-    if (container?.hasPointerCapture(e.pointerId)) container.releasePointerCapture(e.pointerId);
-  };
-
-  const suppressDragClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (suppressClickRef.current) {
-      e.preventDefault();
-      e.stopPropagation();
-      suppressClickRef.current = false;
-    }
-  };
-
   if (myHand.length === 0) {
     return (
       <div className="rounded-xl border-2 border-dashed border-ink/40 bg-paper/60 px-4 py-4 text-center font-mono text-xs font-bold uppercase tracking-[0.1em] text-ink-muted">
@@ -135,13 +92,7 @@ export const Hand: React.FC<{ selectedCards: string[]; onSelect: (id: string) =>
         data-hand-scroll
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={finishPointerDrag}
-        onPointerCancel={(e) => finishPointerDrag(e, true)}
-        onLostPointerCapture={(e) => finishPointerDrag(e, true)}
-        onClickCapture={suppressDragClick}
-        className="no-scrollbar flex min-h-[9.5rem] sm:min-h-[12rem] items-end overflow-x-auto overflow-y-visible py-4 touch-pan-x cursor-grab active:cursor-grabbing"
+        className="no-scrollbar flex min-h-[9.5rem] sm:min-h-[12rem] items-end overflow-x-auto overflow-y-visible py-4 touch-pan-x"
         style={{
           overscrollBehaviorX: 'contain',
           WebkitOverflowScrolling: 'touch',

@@ -59,6 +59,10 @@ export const PlayerSeat: React.FC<{ player: Player; position: number; total: num
         <div className="mt-0.5 bg-confirmed-green text-white border border-ink px-1.5 py-0.5 text-[9px] font-bold font-mono uppercase shadow-[1px_1px_0_var(--color-ink)] rounded">
           WINNER
         </div>
+      ) : presence === 'away' ? (
+        <div className="mt-0.5 bg-evidence-red text-white border border-ink px-1.5 py-0.5 text-[9px] font-bold font-mono uppercase shadow-[1px_1px_0_var(--color-ink)] rounded">
+          AWAY
+        </div>
       ) : (
         <div className="game-seat-cards mt-0.5 flex gap-1 items-center bg-ink text-paper border border-ink px-1.5 py-0.5 text-[9px] shadow-[1px_1px_0_var(--color-ink)] rounded">
           <span className="font-mono font-bold">{handsCount[player.id] ?? player.handCount ?? 0}</span>

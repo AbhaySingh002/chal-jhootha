@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 
@@ -184,6 +185,334 @@ func waitTypeMaybe(out chan []byte, typ string) []byte {
 	case <-time.After(50 * time.Millisecond):
 		return nil
 	}
+}
+
+type gameClient struct {
+	id   string
+	conn string
+	out  chan []byte
+}
+
+func startGame(t *testing.T, r *room.Room, clients []gameClient) {
+	t.Helper()
+	for _, client := range clients {
+		drain(client.out)
+	}
+	r.Inbox <- room.RoomMessage{
+		ConnectionID: clients[0].conn,
+		PlayerID:     clients[0].id,
+		Event:        &ws.StartGameEvent{BaseClientEvent: ws.BaseClientEvent{ClientMsgID: "start", Type: "start_game"}},
+	}
+	for _, client := range clients {
+		waitType(t, client.out, "game_state")
+	}
+}
+
+func syncState(t *testing.T, r *room.Room, client gameClient) ws.GameStateEvent {
+	t.Helper()
+	drain(client.out)
+	r.Inbox <- room.RoomMessage{
+		ConnectionID: client.conn,
+		PlayerID:     client.id,
+		Event:        &ws.SyncStateEvent{BaseClientEvent: ws.BaseClientEvent{ClientMsgID: "sync-" + client.id, Type: "sync_state"}},
+	}
+	var state ws.GameStateEvent
+	require.NoError(t, json.Unmarshal(waitType(t, client.out, "game_state"), &state))
+	return state
+}
+
+func clientByID(t *testing.T, clients []gameClient, id string) gameClient {
+	t.Helper()
+	for _, client := range clients {
+		if client.id == id {
+			return client
+		}
+	}
+	t.Fatalf("missing client %s", id)
+	return gameClient{}
+}
+
+func claimsFor(cards []ws.Card) []ws.ClaimGroup {
+	counts := map[ws.Rank]int{}
+	for _, card := range cards {
+		counts[card.Rank]++
+	}
+	ranks := make([]string, 0, len(counts))
+	for rank := range counts {
+		ranks = append(ranks, string(rank))
+	}
+	sort.Strings(ranks)
+	claims := make([]ws.ClaimGroup, 0, len(ranks))
+	for _, rank := range ranks {
+		claims = append(claims, ws.ClaimGroup{Rank: ws.Rank(rank), Count: counts[ws.Rank(rank)]})
+	}
+	return claims
+}
+
+func playCards(t *testing.T, r *room.Room, client gameClient, cards []ws.Card, claims []ws.ClaimGroup) ws.GameStateEvent {
+	t.Helper()
+	state := syncState(t, r, client)
+	require.Equal(t, client.id, *state.CurrentTurnPlayerID)
+	ids := make([]string, len(cards))
+	for i, card := range cards {
+		ids[i] = card.ID
+	}
+	r.Inbox <- room.RoomMessage{
+		ConnectionID: client.conn,
+		PlayerID:     client.id,
+		Event: &ws.PlayCardsEvent{
+			BaseClientEvent: ws.BaseClientEvent{ClientMsgID: "play-" + client.id, Type: "play_cards"},
+			CardIDs:         ids,
+			Claims:          claims,
+			ExpectedSeq:     state.Seq,
+		},
+	}
+	var after ws.GameStateEvent
+	require.NoError(t, json.Unmarshal(waitType(t, client.out, "game_state"), &after))
+	return after
+}
+
+func skipTurn(t *testing.T, r *room.Room, client gameClient) {
+	t.Helper()
+	state := syncState(t, r, client)
+	require.Equal(t, client.id, *state.CurrentTurnPlayerID)
+	r.Inbox <- room.RoomMessage{
+		ConnectionID: client.conn,
+		PlayerID:     client.id,
+		Event:        &ws.SkipEvent{BaseClientEvent: ws.BaseClientEvent{ClientMsgID: "skip-" + client.id, Type: "skip"}, ExpectedSeq: state.Seq},
+	}
+}
+
+func challengeTurn(t *testing.T, r *room.Room, client gameClient) {
+	t.Helper()
+	state := syncState(t, r, client)
+	require.Equal(t, client.id, *state.CurrentTurnPlayerID)
+	r.Inbox <- room.RoomMessage{
+		ConnectionID: client.conn,
+		PlayerID:     client.id,
+		Event:        &ws.ChallengeEvent{BaseClientEvent: ws.BaseClientEvent{ClientMsgID: "challenge-" + client.id, Type: "challenge"}, ExpectedSeq: state.Seq},
+	}
+}
+
+func newPlayingRoom(t *testing.T, code string, count int) (*room.Room, []gameClient) {
+	t.Helper()
+	r := room.NewRoom(code, nil)
+	t.Cleanup(func() { close(r.CloseReq) })
+	clients := make([]gameClient, 0, count)
+	for i := 0; i < count; i++ {
+		id := fmt.Sprintf("player-%d", i+1)
+		conn := fmt.Sprintf("conn-%d", i+1)
+		playerID, _, out := join(t, r, id, fmt.Sprintf("P%d", i+1), conn)
+		clients = append(clients, gameClient{id: playerID, conn: conn, out: out})
+	}
+	startGame(t, r, clients)
+	return r, clients
+}
+
+func TestMidGameReconnectRestoresPrivateHandAndPresence(t *testing.T) {
+	r, clients := newPlayingRoom(t, "MID_RECON", 2)
+	target := clients[1]
+	before := syncState(t, r, target)
+	drain(clients[0].out)
+
+	r.Inbox <- room.RoomMessage{ConnectionID: target.conn, PlayerID: target.id, Event: room.InternalLeaveEvent{ConnectionID: target.conn}}
+	var disconnected ws.PlayerDisconnectedEvent
+	require.NoError(t, json.Unmarshal(waitType(t, clients[0].out, "player_disconnected"), &disconnected))
+	assert.Equal(t, target.id, disconnected.PlayerID)
+
+	out := make(chan []byte, 32)
+	reply := make(chan string, 1)
+	r.Inbox <- room.RoomMessage{ConnectionID: "reconnect", Event: room.InternalJoinEvent{
+		ClientMsgID: "rejoin", PlayerName: "P2", UserID: target.id, ConnectionID: "reconnect", Outbound: out, ReplyChan: reply,
+	}}
+	require.Equal(t, target.id, <-reply)
+	waitType(t, out, "ack")
+	var restored ws.GameStateEvent
+	require.NoError(t, json.Unmarshal(waitType(t, out, "game_state"), &restored))
+	assert.Equal(t, before.YourHand, restored.YourHand)
+	assert.Equal(t, before.CurrentTurnPlayerID, restored.CurrentTurnPlayerID)
+	assert.Equal(t, before.StackCount, restored.StackCount)
+	for _, player := range restored.Players {
+		if player.ID == target.id {
+			assert.False(t, player.IsDisconnected)
+		}
+	}
+}
+
+func TestDisconnectedTurnAutoSkipsWithoutRemovingPlayer(t *testing.T) {
+	r, clients := newPlayingRoom(t, "AUTO_SKIP", 2)
+	state := syncState(t, r, clients[0])
+	target := clientByID(t, clients, *state.CurrentTurnPlayerID)
+	observer := clientByID(t, clients, clients[0].id)
+	if observer.id == target.id {
+		observer = clients[1]
+	}
+	drain(observer.out)
+	r.Inbox <- room.RoomMessage{ConnectionID: target.conn, PlayerID: target.id, Event: room.InternalLeaveEvent{ConnectionID: target.conn}}
+	waitType(t, observer.out, "player_disconnected")
+	r.Inbox <- room.RoomMessage{PlayerID: target.id, Event: room.TimeoutSkipEvent{PlayerID: target.id}}
+	after := syncState(t, r, observer)
+	assert.NotEqual(t, target.id, *after.CurrentTurnPlayerID)
+	for _, player := range after.Players {
+		if player.ID == target.id {
+			assert.True(t, player.IsDisconnected)
+		}
+	}
+}
+
+func TestLastCardAllSkipsWinsAndReturnsToLobby(t *testing.T) {
+	r, clients := newPlayingRoom(t, "LAST_SKIP", 3)
+	state := syncState(t, r, clients[0])
+	winner := clientByID(t, clients, *state.CurrentTurnPlayerID)
+	hand := syncState(t, r, winner).YourHand
+	afterLastPlay := playCards(t, r, winner, hand, claimsFor(hand))
+	firstResponder := clientByID(t, clients, *afterLastPlay.CurrentTurnPlayerID)
+	skipTurn(t, r, firstResponder)
+	afterFirstResponse := syncState(t, r, winner)
+	secondResponder := clientByID(t, clients, *afterFirstResponse.CurrentTurnPlayerID)
+	skipTurn(t, r, secondResponder)
+
+	var won ws.PlayerWonEvent
+	require.NoError(t, json.Unmarshal(waitType(t, winner.out, "player_won"), &won))
+	assert.Equal(t, winner.id, won.PlayerID)
+	assert.True(t, won.GameOver)
+	var lobby ws.RoomStateEvent
+	require.NoError(t, json.Unmarshal(waitType(t, winner.out, "room_state"), &lobby))
+	assert.Equal(t, ws.PhaseLobby, lobby.Phase)
+	assert.Equal(t, []string{winner.id}, lobby.LastMatch.WinnerIDs)
+}
+
+func TestLastCardTruthfulCalloutWinsAndBluffCalloutDoesNot(t *testing.T) {
+	t.Run("truthful", func(t *testing.T) {
+		r, clients := newPlayingRoom(t, "LAST_TRUTH", 2)
+		state := syncState(t, r, clients[0])
+		winner := clientByID(t, clients, *state.CurrentTurnPlayerID)
+		other := clientByID(t, clients, clients[0].id)
+		if other.id == winner.id {
+			other = clients[1]
+		}
+		hand := syncState(t, r, winner).YourHand
+		playCards(t, r, winner, hand, claimsFor(hand))
+		challengeTurn(t, r, other)
+		var won ws.PlayerWonEvent
+		require.NoError(t, json.Unmarshal(waitType(t, winner.out, "player_won"), &won))
+		assert.Equal(t, winner.id, won.PlayerID)
+		assert.True(t, won.GameOver)
+	})
+
+	t.Run("bluff", func(t *testing.T) {
+		r, clients := newPlayingRoom(t, "LAST_BLUFF", 2)
+		state := syncState(t, r, clients[0])
+		liar := clientByID(t, clients, *state.CurrentTurnPlayerID)
+		other := clientByID(t, clients, clients[0].id)
+		if other.id == liar.id {
+			other = clients[1]
+		}
+		hand := syncState(t, r, liar).YourHand
+		playCards(t, r, liar, hand, []ws.ClaimGroup{{Rank: "2", Count: len(hand)}})
+		challengeTurn(t, r, other)
+		var result ws.ChallengeResultEvent
+		require.NoError(t, json.Unmarshal(waitType(t, other.out, "challenge_result"), &result))
+		assert.True(t, result.WasBluff)
+		assert.Equal(t, liar.id, result.PlayedByID)
+		after := syncState(t, r, other)
+		assert.Equal(t, ws.PhasePlaying, after.Phase)
+		assert.Nil(t, after.PendingFinishID)
+		for _, player := range after.Players {
+			if player.ID == liar.id {
+				assert.Greater(t, player.HandCount, 0)
+			}
+		}
+	})
+}
+
+func TestLastCardResponseLapAcceptsPlayAndChallengesNewestTopPlay(t *testing.T) {
+	r, clients := newPlayingRoom(t, "LAST_LAP", 3)
+	state := syncState(t, r, clients[0])
+	winner := clientByID(t, clients, *state.CurrentTurnPlayerID)
+	hand := syncState(t, r, winner).YourHand
+	afterLastPlay := playCards(t, r, winner, hand, claimsFor(hand))
+	followUp := clientByID(t, clients, *afterLastPlay.CurrentTurnPlayerID)
+	followUpState := syncState(t, r, followUp)
+	require.NotNil(t, followUpState.ClaimedRank)
+	var bluffCard ws.Card
+	for _, card := range followUpState.YourHand {
+		if card.Rank != *followUpState.ClaimedRank {
+			bluffCard = card
+			break
+		}
+	}
+	require.NotEmpty(t, bluffCard.ID)
+	afterFollowUp := playCards(t, r, followUp, []ws.Card{bluffCard}, nil)
+	challenger := clientByID(t, clients, *afterFollowUp.CurrentTurnPlayerID)
+	challengeTurn(t, r, challenger)
+
+	var result ws.ChallengeResultEvent
+	require.NoError(t, json.Unmarshal(waitType(t, challenger.out, "challenge_result"), &result))
+	assert.Equal(t, followUp.id, result.PlayedByID)
+	assert.True(t, result.WasBluff)
+	var won ws.PlayerWonEvent
+	require.NoError(t, json.Unmarshal(waitType(t, winner.out, "player_won"), &won))
+	assert.Equal(t, winner.id, won.PlayerID)
+	assert.True(t, won.GameOver)
+}
+
+func TestLastCardResponseLapSurvivesSnapshotRestore(t *testing.T) {
+	r, clients := newPlayingRoom(t, "LAST_RESTORE", 3)
+	state := syncState(t, r, clients[0])
+	winner := clientByID(t, clients, *state.CurrentTurnPlayerID)
+	hand := syncState(t, r, winner).YourHand
+	afterLastPlay := playCards(t, r, winner, hand, claimsFor(hand))
+	firstResponder := clientByID(t, clients, *afterLastPlay.CurrentTurnPlayerID)
+	skipTurn(t, r, firstResponder)
+	afterFirstResponse := syncState(t, r, winner)
+
+	raw, err := r.MarshalSnapshot()
+	require.NoError(t, err)
+	restored, err := room.RestoreRoom(raw, nil)
+	require.NoError(t, err)
+	defer close(restored.CloseReq)
+
+	remaining := clientByID(t, clients, *afterFirstResponse.CurrentTurnPlayerID)
+	out := make(chan []byte, 32)
+	reply := make(chan string, 1)
+	restored.Inbox <- room.RoomMessage{ConnectionID: "restore-remaining", Event: room.InternalJoinEvent{
+		ClientMsgID: "restore-join", PlayerName: "P", UserID: remaining.id, ConnectionID: "restore-remaining", Outbound: out, ReplyChan: reply,
+	}}
+	require.Equal(t, remaining.id, <-reply)
+	waitType(t, out, "ack")
+	var restoredState ws.GameStateEvent
+	require.NoError(t, json.Unmarshal(waitType(t, out, "game_state"), &restoredState))
+	require.NotNil(t, restoredState.PendingFinishID)
+	assert.Equal(t, winner.id, *restoredState.PendingFinishID)
+	assert.Equal(t, remaining.id, *restoredState.CurrentTurnPlayerID)
+
+	restored.Inbox <- room.RoomMessage{ConnectionID: "restore-remaining", PlayerID: remaining.id, Event: &ws.SkipEvent{
+		BaseClientEvent: ws.BaseClientEvent{ClientMsgID: "restore-skip", Type: "skip"}, ExpectedSeq: restoredState.Seq,
+	}}
+	var won ws.PlayerWonEvent
+	require.NoError(t, json.Unmarshal(waitType(t, out, "player_won"), &won))
+	assert.Equal(t, winner.id, won.PlayerID)
+}
+
+func TestMatchEndingAbandonReturnsToLobby(t *testing.T) {
+	r, clients := newPlayingRoom(t, "ABANDON_FINISH", 2)
+	state := syncState(t, r, clients[0])
+	abandoned := clientByID(t, clients, clients[0].id)
+	if abandoned.id == *state.CurrentTurnPlayerID {
+		abandoned = clients[1]
+	}
+	observer := clientByID(t, clients, clients[0].id)
+	if observer.id == abandoned.id {
+		observer = clients[1]
+	}
+	drain(observer.out)
+	r.Inbox <- room.RoomMessage{ConnectionID: abandoned.conn, PlayerID: abandoned.id, Event: room.InternalLeaveEvent{ConnectionID: abandoned.conn}}
+	waitType(t, observer.out, "player_disconnected")
+	r.Inbox <- room.RoomMessage{PlayerID: abandoned.id, Event: room.AbandonEvent{PlayerID: abandoned.id}}
+	var lobby ws.RoomStateEvent
+	require.NoError(t, json.Unmarshal(waitType(t, observer.out, "room_state"), &lobby))
+	assert.Equal(t, ws.PhaseLobby, lobby.Phase)
 }
 
 func TestDuplicateAction(t *testing.T) {

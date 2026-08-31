@@ -15,6 +15,7 @@ type Snapshot struct {
 	Stack            []ws.Card            `json:"stack"`
 	MatchID          string               `json:"matchId,omitempty"`
 	RejoinTokens     map[string]string    `json:"rejoinTokens"`
+	PendingFinish    *pendingFinishRound  `json:"pendingFinish,omitempty"`
 	StartedAtUnix    *int64               `json:"startedAtUnix,omitempty"`
 	LastActivityUnix int64                `json:"lastActivityUnix"`
 }
@@ -33,6 +34,7 @@ func (r *Room) MarshalSnapshot() ([]byte, error) {
 		Stack:            r.stack,
 		MatchID:          r.matchID,
 		RejoinTokens:     r.rejoinTokens,
+		PendingFinish:    r.pendingFinish,
 		StartedAtUnix:    started,
 		LastActivityUnix: r.lastActivity.Unix(),
 	}
@@ -56,6 +58,11 @@ func RestoreRoom(raw []byte, persistFn func(*Room)) (*Room, error) {
 	r.matchID = s.MatchID
 	if s.RejoinTokens != nil {
 		r.rejoinTokens = s.RejoinTokens
+	}
+	if s.PendingFinish != nil {
+		r.pendingFinish = s.PendingFinish
+	} else if r.State.PendingFinishID != nil {
+		r.startPendingFinish(*r.State.PendingFinishID)
 	}
 	if s.StartedAtUnix != nil {
 		t := time.Unix(*s.StartedAtUnix, 0)

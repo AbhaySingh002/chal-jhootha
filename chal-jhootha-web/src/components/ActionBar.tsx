@@ -26,9 +26,11 @@ export const ActionBar: React.FC<{ selectedCards: string[]; clearSelection: () =
   const hasSelected = selectedCards.length > 0;
   const activeSuspect = gameState.players.find((player) => player.id === gameState.currentTurnPlayerId)?.name || 'Another player';
   const topPlayer = gameState.players.find((player) => player.id === gameState.topPlay?.playerId)?.name || 'the last player';
+  const pendingFinishPlayer = gameState.players.find((player) => player.id === gameState.pendingFinishId)?.name || 'the last player';
   const claimsTotal = claims.reduce((total, claim) => total + claim.count, 0);
   const hasDuplicateClaimRank = new Set(claims.map((claim) => claim.rank)).size !== claims.length;
   const claimsAreValid = claims.length > 0 && claimsTotal === selectedCards.length && !hasDuplicateClaimRank;
+  const finalCalloutNotice = gameState.pendingFinishId ? <p role="status" className="mb-2 border-2 border-ink bg-caution-yellow px-3 py-2 text-center font-mono text-xs font-bold text-ink">Final callout for {pendingFinishPlayer}: Callout, Skip, or Play.</p> : null;
 
   const playSelected = () => {
     if (!hasSelected) return;
@@ -54,12 +56,13 @@ export const ActionBar: React.FC<{ selectedCards: string[]; clearSelection: () =
   };
 
   if (!isMyTurn) {
-    return <p className="border-2 border-ink bg-ink px-3 py-2 text-center font-mono text-xs font-bold uppercase tracking-[0.08em] text-paper">{activeSuspect}'s turn</p>;
+    return <>{finalCalloutNotice}<p className="border-2 border-ink bg-ink px-3 py-2 text-center font-mono text-xs font-bold uppercase tracking-[0.08em] text-paper">{activeSuspect}'s turn</p></>;
   }
 
   return (
     <>
       {lastError ? <p role="alert" className="mb-2 border-2 border-ink bg-evidence-red px-3 py-2 text-center font-mono text-xs font-bold text-white">{lastError}</p> : null}
+      {finalCalloutNotice}
       <AnimatePresence mode="wait">
       {isSelectingClaims ? (
         <motion.div key="claim-composer" initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.18 }} className="game-claim-composer border-3 border-ink bg-surface p-3 shadow-[4px_4px_0_var(--color-ink)] sm:p-4">

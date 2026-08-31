@@ -36,6 +36,16 @@ type connectionState struct {
 	Outbound chan []byte
 }
 
+// pendingFinishRound is server-private state for the response lap after a
+// player empties their hand. It is persisted with the room but never sent to
+// other players, so the last play stays face down until a normal callout.
+type pendingFinishRound struct {
+	PlayerID             string   `json:"playerId"`
+	EligibleIDs          []string `json:"eligibleIds"`
+	RespondedIDs         []string `json:"respondedIds"`
+	ContinuationOpenerID string   `json:"continuationOpenerId,omitempty"`
+}
+
 type Room struct {
 	Code     string
 	State    ws.GameState
@@ -55,6 +65,7 @@ type Room struct {
 	tracker          *IdempotencyTracker
 	disconnectTimers map[string]*time.Timer
 	abandonTimers    map[string]*time.Timer
+	pendingFinish    *pendingFinishRound
 	voiceMembers     map[string]bool
 	lastReactionAt   map[string]time.Time
 	persistFn        func(*Room)
@@ -479,6 +490,116 @@ func (r *Room) canAct(playerID, connID string) bool {
 	return false
 }
 
+func (r *Room) startPendingFinish(playerID string) {
+	eligible := make([]string, 0, len(r.State.Players)-1)
+	for _, player := range r.State.Players {
+		if player.ID != playerID && !player.IsWinner && !player.IsAbandoned {
+			eligible = append(eligible, player.ID)
+		}
+	}
+	r.pendingFinish = &pendingFinishRound{PlayerID: playerID, EligibleIDs: eligible}
+	r.State.PendingFinishID = &playerID
+}
+
+func (r *Room) clearPendingFinish() {
+	r.pendingFinish = nil
+	r.State.PendingFinishID = nil
+}
+
+func (r *Room) pendingFinishCanRespond(playerID string) bool {
+	if r.pendingFinish == nil || r.pendingFinish.PlayerID == playerID {
+		return false
+	}
+	for _, id := range r.pendingFinish.EligibleIDs {
+		if id != playerID {
+			continue
+		}
+		for _, responded := range r.pendingFinish.RespondedIDs {
+			if responded == playerID {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func (r *Room) markPendingFinishResponse(playerID string, playedOnTop bool) {
+	if !r.pendingFinishCanRespond(playerID) {
+		return
+	}
+	r.pendingFinish.RespondedIDs = append(r.pendingFinish.RespondedIDs, playerID)
+	if playedOnTop && r.pendingFinish.ContinuationOpenerID == "" {
+		r.pendingFinish.ContinuationOpenerID = playerID
+	}
+}
+
+func (r *Room) nextPendingFinishResponder(afterID string) (string, bool) {
+	if r.pendingFinish == nil || len(r.State.Players) == 0 {
+		return "", false
+	}
+	start := 0
+	for i, player := range r.State.Players {
+		if player.ID == afterID {
+			start = i
+			break
+		}
+	}
+	for i := 1; i <= len(r.State.Players); i++ {
+		player := r.State.Players[(start+i)%len(r.State.Players)]
+		if player.IsWinner || player.IsAbandoned || !r.pendingFinishCanRespond(player.ID) {
+			continue
+		}
+		return player.ID, true
+	}
+	return "", false
+}
+
+func (r *Room) isActivePlayer(playerID string) bool {
+	for _, player := range r.State.Players {
+		if player.ID == playerID {
+			return !player.IsWinner && !player.IsAbandoned
+		}
+	}
+	return false
+}
+
+func (r *Room) resolvePendingFinish(lastResponderID string) {
+	if r.pendingFinish == nil {
+		return
+	}
+	continuationOpenerID := r.pendingFinish.ContinuationOpenerID
+	r.confirmPendingFinish()
+	if r.State.Phase != ws.PhasePlaying {
+		return
+	}
+
+	nextTurn := rules.GetNextPlayerID(lastResponderID, r.State.Players, nil)
+	if continuationOpenerID != "" && r.State.StackCount > 0 && r.State.TopPlay != nil && r.isActivePlayer(continuationOpenerID) {
+		r.State.RoundOpenerID = &continuationOpenerID
+		r.State.CurrentTurnPlayerID = &nextTurn
+		return
+	}
+
+	if r.State.StackCount > 0 {
+		r.broadcast(ws.StackBurnedEvent{Type: "stack_burned", Seq: r.seq, NextStarterID: nextTurn})
+	}
+	r.stack = []ws.Card{}
+	r.State.StackCount = 0
+	r.State.ClaimedRank = nil
+	r.State.TopPlay = nil
+	r.State.CurrentTurnPlayerID = &nextTurn
+	r.State.RoundOpenerID = &nextTurn
+}
+
+func (r *Room) advancePendingFinish(lastResponderID string) {
+	if next, ok := r.nextPendingFinishResponder(lastResponderID); ok {
+		r.State.CurrentTurnPlayerID = &next
+		return
+	}
+	r.resolvePendingFinish(lastResponderID)
+}
+
 type InternalJoinEvent struct {
 	ClientMsgID  string
 	PlayerName   string
@@ -773,13 +894,28 @@ func (r *Room) handleAbandon(ev AbandonEvent) {
 		}
 		r.State.Players[i].IsAbandoned = true
 		r.State.Players[i].Role = ws.RoleAbandoned
+		if r.pendingFinish != nil && r.pendingFinish.PlayerID == ev.PlayerID {
+			r.clearPendingFinish()
+		}
 		r.seq++
 		logger.Info("ABANDON", "Player abandoned", "room", r.Code, "player", ev.PlayerID)
 		r.broadcast(ws.PlayerAbandonedEvent{Type: "player_abandoned", Seq: r.seq, PlayerID: ev.PlayerID})
 		if r.State.CurrentTurnPlayerID != nil && *r.State.CurrentTurnPlayerID == ev.PlayerID {
 			r.handleSkip(ev.PlayerID, "", &ws.SkipEvent{ExpectedSeq: r.seq})
 		} else {
+			if r.pendingFinish != nil {
+				if _, waiting := r.nextPendingFinishResponder(ev.PlayerID); !waiting {
+					r.resolvePendingFinish(ev.PlayerID)
+					r.broadcastGameState()
+					r.returnCompletedGameToLobby()
+					return
+				}
+			}
 			r.maybeEndGame()
+			if r.State.Phase == ws.PhaseFinished {
+				r.returnCompletedGameToLobby()
+				return
+			}
 			r.persist()
 		}
 		return
@@ -832,7 +968,7 @@ func (r *Room) resetForLobby() {
 	r.stack = []ws.Card{}
 	r.State.Winners = []string{}
 	r.State.LastMatch = nil
-	r.State.PendingFinishID = nil
+	r.clearPendingFinish()
 	r.State.WinnerCountLocked = false
 	r.playerHands = make(map[string][]ws.Card)
 	r.matchID = ""
@@ -882,7 +1018,7 @@ func (r *Room) handleStartGame(playerID, connID string, ev *ws.StartGameEvent) {
 	r.startedAt = &now
 	r.matchID = uuid.NewString()
 	r.State.Winners = []string{}
-	r.State.PendingFinishID = nil
+	r.clearPendingFinish()
 
 	ids := make([]string, len(r.State.Players))
 	for i := range r.State.Players {
@@ -982,6 +1118,17 @@ func (r *Room) handlePlayCards(playerID, connID string, ev *ws.PlayCardsEvent) {
 			newHand = append(newHand, c)
 		}
 	}
+	respondingToFinish := r.pendingFinish != nil
+	if respondingToFinish && !r.pendingFinishCanRespond(playerID) {
+		r.reject(playerID, connID, "LAST_CARD_RESPONSE_CLOSED", "You have already responded to the last-card play")
+		return
+	}
+	// ponytail: one last-card response lap at a time; support nested finish
+	// laps only if multi-winner games need simultaneous final-card plays.
+	if respondingToFinish && len(newHand) == 0 {
+		r.reject(playerID, connID, "LAST_CARD_RESPONSE_PENDING", "Keep one card while responding to another player's last-card play")
+		return
+	}
 	r.playerHands[playerID] = newHand
 	r.stack = append(r.stack, playedCards...)
 
@@ -1001,20 +1148,20 @@ func (r *Room) handlePlayCards(playerID, connID string, ev *ws.PlayCardsEvent) {
 		Details:  map[string]any{"count": len(playedCards), "claims": claims},
 	}
 
-	if len(newHand) == 0 {
-		pid := playerID
-		r.State.PendingFinishID = &pid
+	if respondingToFinish {
+		r.markPendingFinishResponse(playerID, true)
+	} else if len(newHand) == 0 {
+		r.startPendingFinish(playerID)
 	}
-
-	// A new play makes the previous top play unchallengeable. This is the
-	// chosen confirmation point for a player pending on an empty hand. Apply
-	// the superseding play first so a winning transition never drops it.
-	r.confirmPendingFinish()
 
 	r.seq++
 	if r.State.Phase == ws.PhasePlaying {
-		nextTurn := rules.GetNextPlayerID(playerID, r.State.Players, r.State.PendingFinishID)
-		r.State.CurrentTurnPlayerID = &nextTurn
+		if r.pendingFinish != nil {
+			r.advancePendingFinish(playerID)
+		} else {
+			nextTurn := rules.GetNextPlayerID(playerID, r.State.Players, nil)
+			r.State.CurrentTurnPlayerID = &nextTurn
+		}
 	}
 	logger.Info("PLAY", "Cards played", "room", r.Code, "player", playerID, "count", len(playedCards), "remainingHand", len(newHand), "stackTotal", r.State.StackCount)
 	r.commitAction(playerID, connID, ev.ClientMsgID)
@@ -1061,6 +1208,11 @@ func (r *Room) handleChallenge(playerID, connID string, ev *ws.ChallengeEvent) {
 		r.reject(playerID, connID, "INVALID_CHALLENGE", "Nothing to challenge")
 		return
 	}
+	respondingToFinish := r.pendingFinish != nil
+	if respondingToFinish && !r.pendingFinishCanRespond(playerID) {
+		r.reject(playerID, connID, "LAST_CARD_RESPONSE_CLOSED", "You have already responded to the last-card play")
+		return
+	}
 
 	challengedPlayerID := r.State.TopPlay.PlayerID
 	topCards := r.stack[len(r.stack)-r.State.TopPlay.CardCount:]
@@ -1089,10 +1241,8 @@ func (r *Room) handleChallenge(playerID, connID string, ev *ws.ChallengeEvent) {
 		}
 	}
 
-	if wasBluff && r.State.PendingFinishID != nil && *r.State.PendingFinishID == challengedPlayerID {
-		r.State.PendingFinishID = nil
-	} else if !wasBluff && r.State.PendingFinishID != nil && *r.State.PendingFinishID == challengedPlayerID {
-		r.confirmPendingFinish()
+	if wasBluff && r.pendingFinish != nil && r.pendingFinish.PlayerID == challengedPlayerID {
+		r.clearPendingFinish()
 	}
 
 	r.seq++
@@ -1107,9 +1257,14 @@ func (r *Room) handleChallenge(playerID, connID string, ev *ws.ChallengeEvent) {
 	r.State.StackCount = 0
 	r.State.ClaimedRank = nil
 	r.State.TopPlay = nil
-	r.State.CurrentTurnPlayerID = &nextStarterID
-	r.State.RoundOpenerID = &nextStarterID
 	r.State.LastAction = &ws.LastAction{PlayerID: playerID, Type: ws.ActionChallenge}
+	if respondingToFinish && r.pendingFinish != nil {
+		r.markPendingFinishResponse(playerID, false)
+		r.advancePendingFinish(playerID)
+	} else {
+		r.State.CurrentTurnPlayerID = &nextStarterID
+		r.State.RoundOpenerID = &nextStarterID
+	}
 	r.maybeEndGame()
 	r.commitAction(playerID, connID, ev.ClientMsgID)
 	r.broadcastGameState()
@@ -1142,9 +1297,26 @@ func (r *Room) handleSkip(playerID, connID string, ev *ws.SkipEvent) {
 		r.reject(playerID, connID, "STALE_ACTION", "State has changed")
 		return
 	}
+	if r.pendingFinish != nil && !r.pendingFinishCanRespond(playerID) {
+		r.reject(playerID, connID, "LAST_CARD_RESPONSE_CLOSED", "You have already responded to the last-card play")
+		return
+	}
 
 	r.State.LastAction = &ws.LastAction{PlayerID: playerID, Type: ws.ActionSkip}
 	r.seq++
+	if r.pendingFinish != nil {
+		r.markPendingFinishResponse(playerID, false)
+		r.advancePendingFinish(playerID)
+		r.maybeEndGame()
+		if ev.ClientMsgID != "" {
+			r.commitAction(playerID, connID, ev.ClientMsgID)
+		} else {
+			r.persist()
+		}
+		r.broadcastGameState()
+		r.returnCompletedGameToLobby()
+		return
+	}
 
 	if rules.SkipBurns(playerID, r.State.RoundOpenerID) {
 		nextTurn := rules.GetNextPlayerID(playerID, r.State.Players, r.State.PendingFinishID)
@@ -1174,6 +1346,7 @@ func (r *Room) handleSkip(playerID, connID string, ev *ws.SkipEvent) {
 
 func (r *Room) confirmPendingFinish() {
 	if r.State.PendingFinishID == nil {
+		r.pendingFinish = nil
 		return
 	}
 	pid := *r.State.PendingFinishID
@@ -1182,13 +1355,13 @@ func (r *Room) confirmPendingFinish() {
 			continue
 		}
 		if r.State.Players[i].HandCount != 0 || r.State.Players[i].IsWinner {
-			r.State.PendingFinishID = nil
+			r.clearPendingFinish()
 			return
 		}
 		r.State.Players[i].IsWinner = true
 		r.State.Players[i].Role = ws.RoleWinnerSpectator
 		r.State.Winners = append(r.State.Winners, pid)
-		r.State.PendingFinishID = nil
+		r.clearPendingFinish()
 		over := rules.ShouldEndGame(r.State.WinnerCount, r.State.Winners, r.State.Players)
 		if over {
 			r.State.Phase = ws.PhaseFinished
@@ -1201,6 +1374,7 @@ func (r *Room) confirmPendingFinish() {
 		})
 		return
 	}
+	r.clearPendingFinish()
 }
 
 func (r *Room) maybeEndGame() {
