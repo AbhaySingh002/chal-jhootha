@@ -78,6 +78,35 @@ func TestIsClaimBluffForComboClaims(t *testing.T) {
 	assert.True(t, IsClaimBluff([]ws.Card{{Rank: "A"}, {Rank: "K"}}, claims), "visible count must match all claim groups")
 }
 
+func TestValidOpeningClaims(t *testing.T) {
+	tests := []struct {
+		name      string
+		claims    []ws.ClaimGroup
+		cardCount int
+		valid     bool
+	}{
+		{name: "single group lower boundary", claims: []ws.ClaimGroup{{Rank: "K", Count: 1}}, cardCount: 1, valid: true},
+		{name: "single group upper boundary", claims: []ws.ClaimGroup{{Rank: "K", Count: 4}}, cardCount: 4, valid: true},
+		{name: "four plus one combo", claims: []ws.ClaimGroup{{Rank: "K", Count: 4}, {Rank: "3", Count: 1}}, cardCount: 5, valid: true},
+		{name: "final group upper boundary", claims: []ws.ClaimGroup{{Rank: "K", Count: 4}, {Rank: "3", Count: 4}}, cardCount: 8, valid: true},
+		{name: "three group combo", claims: []ws.ClaimGroup{{Rank: "K", Count: 4}, {Rank: "3", Count: 4}, {Rank: "A", Count: 2}}, cardCount: 10, valid: true},
+		{name: "intermediate group must be four", claims: []ws.ClaimGroup{{Rank: "K", Count: 3}, {Rank: "3", Count: 2}}, cardCount: 5},
+		{name: "final group must contain at least one card", claims: []ws.ClaimGroup{{Rank: "K", Count: 4}, {Rank: "3", Count: 0}}, cardCount: 4},
+		{name: "last group cannot exceed four", claims: []ws.ClaimGroup{{Rank: "K", Count: 4}, {Rank: "3", Count: 5}}, cardCount: 9},
+		{name: "single group cannot exceed four", claims: []ws.ClaimGroup{{Rank: "K", Count: 5}}, cardCount: 5},
+		{name: "claims must match selected card total", claims: []ws.ClaimGroup{{Rank: "K", Count: 4}, {Rank: "3", Count: 1}}, cardCount: 6},
+		{name: "ranks must be unique", claims: []ws.ClaimGroup{{Rank: "K", Count: 4}, {Rank: "K", Count: 1}}, cardCount: 5},
+		{name: "rank must be valid", claims: []ws.ClaimGroup{{Rank: "Z", Count: 1}}, cardCount: 1},
+		{name: "opening cannot exceed 52 cards", claims: []ws.ClaimGroup{{Rank: "2", Count: 4}}, cardCount: MaxOpeningCards + 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.valid, ValidOpeningClaims(tt.claims, tt.cardCount))
+		})
+	}
+}
+
 func TestDealLeftoversAndUniqueIDs(t *testing.T) {
 	deck := GenerateDecks(1)
 	assert.Equal(t, 52, len(deck))

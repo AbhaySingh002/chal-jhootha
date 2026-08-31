@@ -11,7 +11,7 @@ const getHandDensity = (): HandDensity => {
   return window.innerWidth < 640 ? 'phone' : 'regular';
 };
 
-export const Hand: React.FC<{ selectedCards: string[]; onSelect: (id: string) => void; concealedCardIds?: string[] }> = ({ selectedCards, onSelect, concealedCardIds = [] }) => {
+export const Hand: React.FC<{ selectedCards: string[]; onSelect: (id: string) => void; concealedCardIds?: string[]; selectionLocked?: boolean }> = ({ selectedCards, onSelect, concealedCardIds = [], selectionLocked = false }) => {
   const { myHand } = useGameStore();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [scrollState, setScrollState] = useState({ scrollLeft: 0, clientWidth: 0, isOverflowing: false });
@@ -140,7 +140,7 @@ export const Hand: React.FC<{ selectedCards: string[]; onSelect: (id: string) =>
                   arcY={arcY}
                   zIndex={idx + 1}
                   concealed={concealedCardIds.includes(card.id)}
-                  onClick={() => onSelect(card.id)}
+                  onClick={selectionLocked ? undefined : () => onSelect(card.id)}
                 />
               </div>
             );

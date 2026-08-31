@@ -1095,8 +1095,8 @@ func (r *Room) handlePlayCards(playerID, connID string, ev *ws.PlayCardsEvent) {
 		if len(claims) == 0 && ev.ClaimedRank != nil {
 			claims = []ws.ClaimGroup{{Rank: *ev.ClaimedRank, Count: len(playedCards)}}
 		}
-		if !validOpeningClaims(claims, len(playedCards)) {
-			r.reject(playerID, connID, "MISSING_RANK", "Must announce rank to open round")
+		if !rules.ValidOpeningClaims(claims, len(playedCards)) {
+			r.reject(playerID, connID, "INVALID_CLAIM", "Opening groups must be four cards each, followed by one group of one to four cards")
 			return
 		}
 		activeRank := claims[len(claims)-1].Rank
@@ -1167,25 +1167,6 @@ func (r *Room) handlePlayCards(playerID, connID string, ev *ws.PlayCardsEvent) {
 	r.commitAction(playerID, connID, ev.ClientMsgID)
 	r.broadcastGameState()
 	r.returnCompletedGameToLobby()
-}
-
-func validOpeningClaims(claims []ws.ClaimGroup, cardCount int) bool {
-	if len(claims) == 0 || cardCount < 1 {
-		return false
-	}
-	seenRanks := make(map[ws.Rank]struct{}, len(claims))
-	total := 0
-	for _, claim := range claims {
-		if claim.Rank == "" || claim.Count < 1 {
-			return false
-		}
-		if _, duplicate := seenRanks[claim.Rank]; duplicate {
-			return false
-		}
-		seenRanks[claim.Rank] = struct{}{}
-		total += claim.Count
-	}
-	return total == cardCount
 }
 
 func (r *Room) handleChallenge(playerID, connID string, ev *ws.ChallengeEvent) {

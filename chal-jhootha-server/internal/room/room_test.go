@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"testing"
 	"time"
 
@@ -221,6 +220,17 @@ func syncState(t *testing.T, r *room.Room, client gameClient) ws.GameStateEvent 
 	return state
 }
 
+func waitForNewGameState(t *testing.T, out chan []byte, previousSeq int) ws.GameStateEvent {
+	t.Helper()
+	for {
+		var state ws.GameStateEvent
+		require.NoError(t, json.Unmarshal(waitType(t, out, "game_state"), &state))
+		if state.Seq > previousSeq {
+			return state
+		}
+	}
+}
+
 func clientByID(t *testing.T, clients []gameClient, id string) gameClient {
 	t.Helper()
 	for _, client := range clients {
@@ -233,18 +243,42 @@ func clientByID(t *testing.T, clients []gameClient, id string) gameClient {
 }
 
 func claimsFor(cards []ws.Card) []ws.ClaimGroup {
-	counts := map[ws.Rank]int{}
+	ranks := []ws.Rank{"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"}
+	claims := make([]ws.ClaimGroup, 0, (len(cards)+3)/4)
+	remaining := len(cards)
+	for index := 0; remaining > 0; index++ {
+		count := remaining
+		if count > 4 {
+			count = 4
+		}
+		claims = append(claims, ws.ClaimGroup{Rank: ranks[index], Count: count})
+		remaining -= count
+	}
+	return claims
+}
+
+func bluffyClaimsFor(cards []ws.Card) []ws.ClaimGroup {
+	claims := claimsFor(cards)
+	actualCounts := make(map[ws.Rank]int)
 	for _, card := range cards {
-		counts[card.Rank]++
+		actualCounts[card.Rank]++
 	}
-	ranks := make([]string, 0, len(counts))
-	for rank := range counts {
-		ranks = append(ranks, string(rank))
-	}
-	sort.Strings(ranks)
-	claims := make([]ws.ClaimGroup, 0, len(ranks))
+	ranks := []ws.Rank{"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"}
 	for _, rank := range ranks {
-		claims = append(claims, ws.ClaimGroup{Rank: ws.Rank(rank), Count: counts[ws.Rank(rank)]})
+		if actualCounts[rank] != claims[0].Count {
+			claims[0].Rank = rank
+			break
+		}
+	}
+	used := map[ws.Rank]bool{claims[0].Rank: true}
+	for index := 1; index < len(claims); index++ {
+		for _, rank := range ranks {
+			if !used[rank] {
+				claims[index].Rank = rank
+				used[rank] = true
+				break
+			}
+		}
 	}
 	return claims
 }
@@ -253,6 +287,10 @@ func playCards(t *testing.T, r *room.Room, client gameClient, cards []ws.Card, c
 	t.Helper()
 	state := syncState(t, r, client)
 	require.Equal(t, client.id, *state.CurrentTurnPlayerID)
+	// A state broadcast from the action immediately before sync_state can race
+	// with the sync reply. It represents the same authoritative state, so clear
+	// a duplicate before waiting for the play's own resulting state.
+	drain(client.out)
 	ids := make([]string, len(cards))
 	for i, card := range cards {
 		ids[i] = card.ID
@@ -261,15 +299,13 @@ func playCards(t *testing.T, r *room.Room, client gameClient, cards []ws.Card, c
 		ConnectionID: client.conn,
 		PlayerID:     client.id,
 		Event: &ws.PlayCardsEvent{
-			BaseClientEvent: ws.BaseClientEvent{ClientMsgID: "play-" + client.id, Type: "play_cards"},
+			BaseClientEvent: ws.BaseClientEvent{ClientMsgID: fmt.Sprintf("play-%s-%d", client.id, state.Seq), Type: "play_cards"},
 			CardIDs:         ids,
 			Claims:          claims,
 			ExpectedSeq:     state.Seq,
 		},
 	}
-	var after ws.GameStateEvent
-	require.NoError(t, json.Unmarshal(waitType(t, client.out, "game_state"), &after))
-	return after
+	return waitForNewGameState(t, client.out, state.Seq)
 }
 
 func skipTurn(t *testing.T, r *room.Room, client gameClient) {
@@ -307,6 +343,61 @@ func newPlayingRoom(t *testing.T, code string, count int) (*room.Room, []gameCli
 	}
 	startGame(t, r, clients)
 	return r, clients
+}
+
+func TestOpeningComboAcceptsBluffAndSetsFinalRank(t *testing.T) {
+	r, clients := newPlayingRoom(t, "COMBO-BLUFF", 2)
+	state := syncState(t, r, clients[0])
+	actor := clientByID(t, clients, *state.CurrentTurnPlayerID)
+	actorState := syncState(t, r, actor)
+	played := actorState.YourHand[:5]
+
+	allRanks := []ws.Rank{"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"}
+	playedRanks := make(map[ws.Rank]bool)
+	for _, card := range played {
+		playedRanks[card.Rank] = true
+	}
+	missingRanks := make([]ws.Rank, 0, 2)
+	for _, rank := range allRanks {
+		if !playedRanks[rank] {
+			missingRanks = append(missingRanks, rank)
+		}
+	}
+	require.GreaterOrEqual(t, len(missingRanks), 2)
+	claims := []ws.ClaimGroup{{Rank: missingRanks[0], Count: 4}, {Rank: missingRanks[1], Count: 1}}
+
+	after := playCards(t, r, actor, played, claims)
+	require.NotNil(t, after.TopPlay)
+	assert.Equal(t, claims, after.TopPlay.Claims)
+	require.NotNil(t, after.ClaimedRank)
+	assert.Equal(t, missingRanks[1], *after.ClaimedRank)
+}
+
+func TestLaterPlayCannotDeclareAnotherCombo(t *testing.T) {
+	r, clients := newPlayingRoom(t, "COMBO-LATER", 2)
+	state := syncState(t, r, clients[0])
+	opener := clientByID(t, clients, *state.CurrentTurnPlayerID)
+	openerState := syncState(t, r, opener)
+	afterOpening := playCards(t, r, opener, openerState.YourHand[:1], []ws.ClaimGroup{{Rank: "A", Count: 1}})
+
+	nextPlayer := clientByID(t, clients, *afterOpening.CurrentTurnPlayerID)
+	nextState := syncState(t, r, nextPlayer)
+	cards := nextState.YourHand[:5]
+	r.Inbox <- room.RoomMessage{
+		ConnectionID: nextPlayer.conn,
+		PlayerID:     nextPlayer.id,
+		ClientMsg:    "later-combo",
+		Event: &ws.PlayCardsEvent{
+			BaseClientEvent: ws.BaseClientEvent{ClientMsgID: "later-combo", Type: "play_cards"},
+			CardIDs:         []string{cards[0].ID, cards[1].ID, cards[2].ID, cards[3].ID, cards[4].ID},
+			Claims:          []ws.ClaimGroup{{Rank: "K", Count: 4}, {Rank: "3", Count: 1}},
+			ExpectedSeq:     nextState.Seq,
+		},
+	}
+
+	var rejected ws.ActionRejectedEvent
+	require.NoError(t, json.Unmarshal(waitType(t, nextPlayer.out, "action_rejected"), &rejected))
+	assert.Equal(t, "INVALID_CLAIM", rejected.Code)
 }
 
 func TestMidGameReconnectRestoresPrivateHandAndPresence(t *testing.T) {
@@ -386,17 +477,23 @@ func TestLastCardTruthfulCalloutWinsAndBluffCalloutDoesNot(t *testing.T) {
 	t.Run("truthful", func(t *testing.T) {
 		r, clients := newPlayingRoom(t, "LAST_TRUTH", 2)
 		state := syncState(t, r, clients[0])
-		winner := clientByID(t, clients, *state.CurrentTurnPlayerID)
+		opener := clientByID(t, clients, *state.CurrentTurnPlayerID)
 		other := clientByID(t, clients, clients[0].id)
-		if other.id == winner.id {
+		if other.id == opener.id {
 			other = clients[1]
 		}
-		hand := syncState(t, r, winner).YourHand
-		playCards(t, r, winner, hand, claimsFor(hand))
-		challengeTurn(t, r, other)
+		otherState := syncState(t, r, other)
+		finalCard := otherState.YourHand[len(otherState.YourHand)-1]
+
+		playCards(t, r, opener, syncState(t, r, opener).YourHand[:1], []ws.ClaimGroup{{Rank: finalCard.Rank, Count: 1}})
+		playCards(t, r, other, otherState.YourHand[:len(otherState.YourHand)-1], nil)
+		skipTurn(t, r, opener)
+		afterLastPlay := playCards(t, r, other, []ws.Card{finalCard}, []ws.ClaimGroup{{Rank: finalCard.Rank, Count: 1}})
+		assert.Equal(t, opener.id, *afterLastPlay.CurrentTurnPlayerID)
+		challengeTurn(t, r, opener)
 		var won ws.PlayerWonEvent
-		require.NoError(t, json.Unmarshal(waitType(t, winner.out, "player_won"), &won))
-		assert.Equal(t, winner.id, won.PlayerID)
+		require.NoError(t, json.Unmarshal(waitType(t, other.out, "player_won"), &won))
+		assert.Equal(t, other.id, won.PlayerID)
 		assert.True(t, won.GameOver)
 	})
 
@@ -409,7 +506,7 @@ func TestLastCardTruthfulCalloutWinsAndBluffCalloutDoesNot(t *testing.T) {
 			other = clients[1]
 		}
 		hand := syncState(t, r, liar).YourHand
-		playCards(t, r, liar, hand, []ws.ClaimGroup{{Rank: "2", Count: len(hand)}})
+		playCards(t, r, liar, hand, bluffyClaimsFor(hand))
 		challengeTurn(t, r, other)
 		var result ws.ChallengeResultEvent
 		require.NoError(t, json.Unmarshal(waitType(t, other.out, "challenge_result"), &result))

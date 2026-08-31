@@ -135,6 +135,7 @@ export const GameRoom: React.FC = () => {
   } = useGameStore();
   const { data: session } = useSession();
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
+  const [openingDeclarationOpen, setOpeningDeclarationOpen] = useState(false);
   const [pendingName, setPendingName] = useState('');
   const [joinedName, setJoinedName] = useState<string | null>(null);
   const [connectionTimeout, setConnectionTimeout] = useState(false);
@@ -330,6 +331,11 @@ export const GameRoom: React.FC = () => {
   const currentSelectedCards = gameState?.phase === 'playing'
     ? selectedCards.filter((id) => myHand.some((card) => card.id === id))
     : [];
+  const openingDeclarationActive = openingDeclarationOpen
+    && gameState?.phase === 'playing'
+    && gameState.currentTurnPlayerId === playerId
+    && gameState.roundOpenerId === playerId
+    && gameState.stackCount === 0;
 
   const toggleSelect = (id: string) => {
     if (gameState?.phase !== 'playing' || !myHand.some((card) => card.id === id)) return;
@@ -536,9 +542,14 @@ export const GameRoom: React.FC = () => {
       {/* ── Bottom action/hand region ── */}
       <div className="bottom-bar">
         <div className="game-actions mx-auto w-full max-w-2xl">
-          <ActionBar selectedCards={currentSelectedCards} clearSelection={() => setSelectedCards([])} />
+          <ActionBar
+            selectedCards={currentSelectedCards}
+            clearSelection={() => setSelectedCards([])}
+            declarationOpen={openingDeclarationActive}
+            onDeclarationOpenChange={setOpeningDeclarationOpen}
+          />
         </div>
-        <Hand selectedCards={currentSelectedCards} onSelect={toggleSelect} concealedCardIds={concealedCardIds} />
+        <Hand selectedCards={currentSelectedCards} onSelect={toggleSelect} concealedCardIds={concealedCardIds} selectionLocked={openingDeclarationActive} />
       </div>
 
       <PlayerRosterSheet open={rosterOpen} onClose={() => setRosterOpen(false)} players={gameState.players} playerId={playerId} hostId={gameState.hostId} handsCount={handsCount} />

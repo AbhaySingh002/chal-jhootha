@@ -4,6 +4,51 @@ import (
 	"chal-jhootha-server/internal/ws"
 )
 
+const MaxOpeningCards = 52
+
+func IsValidRank(rank ws.Rank) bool {
+	switch rank {
+	case "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A":
+		return true
+	default:
+		return false
+	}
+}
+
+// ValidOpeningClaims checks only the public declaration, never the ranks of
+// the face-down cards. That keeps legal bluffs possible while enforcing the
+// opening combo shape: four-card groups followed by one final one-to-four-card
+// group.
+func ValidOpeningClaims(claims []ws.ClaimGroup, cardCount int) bool {
+	if len(claims) == 0 || len(claims) > 13 || cardCount < 1 || cardCount > MaxOpeningCards {
+		return false
+	}
+
+	seenRanks := make(map[ws.Rank]struct{}, len(claims))
+	total := 0
+	for index, claim := range claims {
+		if !IsValidRank(claim.Rank) {
+			return false
+		}
+		if _, duplicate := seenRanks[claim.Rank]; duplicate {
+			return false
+		}
+		seenRanks[claim.Rank] = struct{}{}
+
+		isFinalGroup := index == len(claims)-1
+		if isFinalGroup {
+			if claim.Count < 1 || claim.Count > 4 {
+				return false
+			}
+		} else if claim.Count != 4 {
+			return false
+		}
+		total += claim.Count
+	}
+
+	return total == cardCount
+}
+
 func IsFinished(p ws.Player) bool {
 	return p.IsWinner
 }
