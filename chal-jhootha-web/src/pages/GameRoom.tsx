@@ -12,6 +12,7 @@ import { Lobby } from '../components/Lobby';
 import { PlayerRosterSheet } from '../components/PlayerRosterSheet';
 import { PlayerSeat } from '../components/PlayerSeat';
 import { Stack } from '../components/Stack';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { useGameStore } from '../state/gameStore';
 import { RoomVoice } from '../voice/voice';
 
@@ -439,8 +440,11 @@ export const GameRoom: React.FC = () => {
       <div className="game-header-stack">
         <header className="game-topbar game-topbar-compact">
           <button type="button" onClick={handleLeaveGame} className="icon-btn" aria-label="Leave room" title="Leave room"><LogOut size={19} strokeWidth={2.5} /></button>
-          <div className="game-voice-controls">
-            {voiceUnavailable ? <DisabledVoiceControls /> : <ActiveVoiceControls key={playerId ?? 'pending'} playerId={playerId} sendVoice={sendVoice} onVoiceError={setVoiceError} />}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <ThemeToggle />
+            <div className="game-voice-controls">
+              {voiceUnavailable ? <DisabledVoiceControls /> : <ActiveVoiceControls key={playerId ?? 'pending'} playerId={playerId} sendVoice={sendVoice} onVoiceError={setVoiceError} />}
+            </div>
           </div>
         </header>
 
@@ -509,7 +513,6 @@ export const GameRoom: React.FC = () => {
                     type="button"
                     onClick={() => {
                       sendTableReaction(emoji);
-                      setReactionsOpen(false);
                     }}
                     className="reaction-button"
                     aria-label={`Send ${emoji} reaction`}
@@ -529,7 +532,7 @@ export const GameRoom: React.FC = () => {
             aria-label={reactionsOpen ? 'Hide table reactions' : 'Show table reactions'}
           >
             <SmilePlus size={16} strokeWidth={2.5} />
-            <span>Reactions</span>
+            <span className="hidden sm:inline">Reactions</span>
             <ChevronUp
               size={14}
               strokeWidth={2.5}

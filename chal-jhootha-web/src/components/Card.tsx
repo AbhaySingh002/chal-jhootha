@@ -7,6 +7,7 @@ interface CardProps {
   card?: CardType;
   faceDown?: boolean;
   selected?: boolean;
+  noShadow?: boolean;
   onClick?: () => void;
   className?: string;
   style?: React.CSSProperties;
@@ -37,6 +38,7 @@ export const Card: React.FC<CardProps> = ({
   card,
   faceDown = false,
   selected = false,
+  noShadow = false,
   onClick,
   className,
   style,
@@ -63,7 +65,8 @@ export const Card: React.FC<CardProps> = ({
       aria-label={card ? `${card.rank} of ${suitSymbols[card.suit]}` : faceDown ? 'Face-down card' : undefined}
       data-hand-card-id={card?.id}
       className={clsx(
-        'relative h-28 w-18 sm:h-36 sm:w-24 flex-shrink-0 origin-bottom select-none overflow-hidden rounded-xl border-2 border-ink bg-surface shadow-[2px_2px_0_var(--color-ink)] transition-shadow sm:rounded-2xl sm:border-[2.5px]',
+        'relative h-28 w-18 sm:h-36 sm:w-24 flex-shrink-0 origin-bottom select-none overflow-hidden rounded-xl border-2 border-ink bg-surface sm:rounded-2xl sm:border-[2.5px]',
+        !noShadow && 'shadow-[2px_2px_0_var(--color-ink)] transition-shadow',
         interactive && !concealed ? 'cursor-pointer' : 'cursor-default',
         concealed && 'pointer-events-none',
         selected && 'shadow-[0px_-4px_0_var(--color-caution-yellow)] ring-2 ring-caution-yellow',
@@ -94,16 +97,25 @@ export const Card: React.FC<CardProps> = ({
       exit={{ opacity: 0, y: -100, scale: 0.8 }}
     >
       {faceDown || !card ? (
-        // Card Back (Confidential)
-        <div className="w-full h-full bg-ink flex items-center justify-center p-2 rounded-xl sm:rounded-2xl">
+        // Card Back (Confidential Evidence with Devanagari watermark)
+        <div
+          className="w-full h-full flex items-center justify-center p-1.5 sm:p-2 rounded-xl sm:rounded-2xl"
+          style={{ background: 'var(--card-back-bg)' }}
+        >
           <div
-            className="w-full h-full flex flex-col items-center justify-center rounded-lg sm:rounded-xl"
+            className="card-watermark-bg w-full h-full flex flex-col items-center justify-center rounded-lg sm:rounded-xl relative overflow-hidden"
             style={{
-              border: '2px solid var(--card-back-border)',
-              background: `repeating-linear-gradient(45deg, transparent, transparent 4px, var(--card-back-stripe) 4px, var(--card-back-stripe) 8px)`,
+              border: '1.5px solid var(--card-back-border)',
             }}
           >
-            <span className="text-white font-mono text-[8px] sm:text-xs font-bold tracking-widest text-center rotate-45 opacity-80">EVIDENCE</span>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span
+                className="font-mono text-[8px] sm:text-[10px] font-extrabold tracking-[0.18em] text-center rotate-45 uppercase select-none opacity-85"
+                style={{ color: 'var(--card-back-text)' }}
+              >
+                EVIDENCE
+              </span>
+            </div>
           </div>
         </div>
       ) : (

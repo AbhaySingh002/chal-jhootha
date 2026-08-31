@@ -26,28 +26,48 @@
   --game-hand-card-width: 4.5rem;
   --game-hand-card-height: 7rem;
   --game-seat-label-width: 4.75rem;
-  --game-stack-width: clamp(5.5rem, 16vw, 7.5rem);
-  --game-stack-height: clamp(7.5rem, 23vw, 10.5rem);
-  --suit-black: #171717;
-  --suit-red: #b92a33;
-  --card-back-stripe: rgba(255, 255, 255, 0.05);
-  --card-back-border: rgba(255, 255, 255, 0.3);
+  --game-stack-width: clamp(5.75rem, 18vw, 7.75rem);
+  --game-stack-height: clamp(8rem, 25vw, 11rem);
+  --suit-black: #141513;
+  --suit-red: #ba242f;
+  --card-back-bg: #181916;
+  --card-back-inner: #21221e;
+  --card-back-text: #fffdf7;
+  --card-back-accent: #ba242f;
+  --card-back-stripe: rgba(255, 255, 255, 0.06);
+  --card-back-border: rgba(255, 255, 255, 0.22);
+  --stack-card-bg: #181916;
+  --stack-card-inner: #22231f;
+  --stack-card-text: #fffdf7;
+  --stack-card-rank: #fffdf7;
+  --stack-card-border: #141513;
+  --card-watermark-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='40' viewBox='0 0 80 40'%3E%3Ctext x='20' y='14' font-family='system-ui, -apple-system, sans-serif' font-size='11' font-weight='800' fill='%23fffdf7' fill-opacity='0.16' text-anchor='middle' transform='rotate(-20 20 14)'%3E%E0%A4%9A%E0%A4%B2%20%E0%A4%9D%E0%A5%82%E0%A4%A0%E0%A4%BE%3C/text%3E%3Ctext x='60' y='34' font-family='system-ui, -apple-system, sans-serif' font-size='11' font-weight='800' fill='%23fffdf7' fill-opacity='0.16' text-anchor='middle' transform='rotate(-20 60 34)'%3E%E0%A4%9A%E0%A4%B2%20%E0%A4%9D%E0%A5%82%E0%A4%A0%E0%A4%BE%3C/text%3E%3C/svg%3E");
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --color-paper: #1c1d1b;
-  --color-surface: #292b28;
-  --color-surface-muted: #3a3b36;
-  --color-ink: #f4efdf;
-  --color-ink-muted: #c4c0b4;
-  --color-evidence-red: #ef5d67;
-  --color-confirmed-green: #57a568;
-  --color-caution-yellow: #efb60d;
-  --suit-black: #f4efdf;
-  --suit-red: #ef5d67;
-  --card-back-stripe: rgba(255, 255, 255, 0.08);
-  --card-back-border: rgba(255, 255, 255, 0.2);
+  --color-paper: #141513;
+  --color-surface: #222420;
+  --color-surface-muted: #33352f;
+  --color-ink: #f4efe4;
+  --color-ink-muted: #a3a093;
+  --color-evidence-red: #e64753;
+  --color-confirmed-green: #4ba35e;
+  --color-caution-yellow: #f0b115;
+  --suit-black: #f4efe4;
+  --suit-red: #e64753;
+  --card-back-bg: #262823;
+  --card-back-inner: #1e201b;
+  --card-back-text: #f4efe4;
+  --card-back-accent: #e64753;
+  --card-back-stripe: rgba(244, 239, 228, 0.07);
+  --card-back-border: rgba(244, 239, 228, 0.2);
+  --stack-card-bg: #262823;
+  --stack-card-inner: #1e201b;
+  --stack-card-text: #f4efe4;
+  --stack-card-rank: #f4efe4;
+  --stack-card-border: #f4efe4;
+  --card-watermark-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='40' viewBox='0 0 80 40'%3E%3Ctext x='20' y='14' font-family='system-ui, -apple-system, sans-serif' font-size='11' font-weight='800' fill='%23f4efe4' fill-opacity='0.14' text-anchor='middle' transform='rotate(-20 20 14)'%3E%E0%A4%9A%E0%A4%B2%20%E0%A4%9D%E0%A5%82%E0%A4%A0%E0%A4%BE%3C/text%3E%3Ctext x='60' y='34' font-family='system-ui, -apple-system, sans-serif' font-size='11' font-weight='800' fill='%23f4efe4' fill-opacity='0.14' text-anchor='middle' transform='rotate(-20 60 34)'%3E%E0%A4%9A%E0%A4%B2%20%E0%A4%9D%E0%A5%82%E0%A4%A0%E0%A4%BE%3C/text%3E%3C/svg%3E");
 }
 
 @layer base {
@@ -265,6 +285,12 @@
   .safe-bottom { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
   .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
+  .card-watermark-bg {
+    background-color: var(--stack-card-inner);
+    background-image: var(--card-watermark-svg);
+    background-repeat: repeat;
+    background-size: 80px 40px;
+  }
 }
 
 @layer components {

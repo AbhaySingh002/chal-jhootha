@@ -15,14 +15,14 @@ export const PlayerSeat: React.FC<{ player: Player; position: number; total: num
   };
   const avatarMark = avatarMarks[player.avatarId || ''] || player.name.substring(0, 2).toUpperCase();
 
-  // The ring keeps label width inside the table stage at narrow widths while
-  // preserving a clear center lane for the stack and reactions.
+  // The ring positions seats cleanly around the perimeter of the table stage,
+  // providing generous vertical breathing room above the central evidence pile.
   const seatSlots: Record<number, Array<[number, number]>> = {
-    1: [[50, 24]],
-    2: [[27, 31], [73, 31]],
-    3: [[17, 43], [50, 24], [83, 43]],
-    4: [[16, 50], [35, 31], [65, 31], [84, 50]],
-    5: [[16, 52], [31, 38], [50, 24], [69, 38], [84, 52]],
+    1: [[50, 13]],
+    2: [[24, 17], [76, 17]],
+    3: [[16, 36], [50, 13], [84, 36]],
+    4: [[14, 46], [32, 17], [68, 17], [86, 46]],
+    5: [[14, 48], [28, 22], [50, 13], [72, 22], [86, 48]],
   };
   const [left, top] = (seatSlots[Math.min(total, 5)]?.[position] ?? seatSlots[1][0]);
 
@@ -65,8 +65,8 @@ export const PlayerSeat: React.FC<{ player: Player; position: number; total: num
         </div>
       ) : (
         <div className="game-seat-cards mt-0.5 flex gap-1 items-center bg-ink text-paper border border-ink px-1.5 py-0.5 text-[9px] shadow-[1px_1px_0_var(--color-ink)] rounded">
-          <span className="font-mono font-bold">{handsCount[player.id] ?? player.handCount ?? 0}</span>
-          <span className="text-[8px] tracking-wider uppercase font-bold text-ink-muted">CARDS</span>
+          <span className="font-mono font-bold leading-none">{handsCount[player.id] ?? player.handCount ?? 0}</span>
+          <span className="text-[7.5px] sm:text-[8px] tracking-wider uppercase font-bold opacity-80 leading-none">CARDS</span>
         </div>
       )}
     </div>
