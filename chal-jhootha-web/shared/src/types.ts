@@ -64,5 +64,6 @@ export interface GameState {
   winnerCount?: number;
   winnerCountLocked?: boolean;
   pendingFinishId?: string | null;
+  resultsLobbyPlayerIds?: string[];
   lastMatch?: LastMatchSummary | null;
 }

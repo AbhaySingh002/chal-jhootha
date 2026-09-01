@@ -69,6 +69,10 @@ export const ResetToLobbySchema = BaseClientEvent.extend({
   type: z.literal('reset_to_lobby'),
 });
 
+export const ReturnToLobbySchema = BaseClientEvent.extend({
+  type: z.literal('return_to_lobby'),
+});
+
 export const LeaveRoomSchema = BaseClientEvent.extend({
   type: z.literal('leave_room'),
 });
@@ -100,6 +104,7 @@ export const ClientEventSchema = z.discriminatedUnion('type', [
   HeartbeatSchema,
   SyncStateSchema,
   ResetToLobbySchema,
+  ReturnToLobbySchema,
   LeaveRoomSchema,
   DestroyRoomSchema,
   VoiceSignalSchema,
@@ -117,6 +122,7 @@ export type HeartbeatEvent = z.infer<typeof HeartbeatSchema>;
 export type SetConfigEvent = z.infer<typeof SetConfigSchema>;
 export type SyncStateEvent = z.infer<typeof SyncStateSchema>;
 export type ResetToLobbyEvent = z.infer<typeof ResetToLobbySchema>;
+export type ReturnToLobbyEvent = z.infer<typeof ReturnToLobbySchema>;
 export type LeaveRoomEvent = z.infer<typeof LeaveRoomSchema>;
 export type DestroyRoomEvent = z.infer<typeof DestroyRoomSchema>;
 export type ReactionInputEvent = z.infer<typeof ReactionSchema>;

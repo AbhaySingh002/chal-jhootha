@@ -315,6 +315,12 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 					_ = json.Unmarshal(msgBytes, &ev)
 					return &ev
 				})
+			case "return_to_lobby":
+				sess.forwardToRoom(rm, base.ClientMsgID, msgBytes, func() any {
+					var ev ws.ReturnToLobbyEvent
+					_ = json.Unmarshal(msgBytes, &ev)
+					return &ev
+				})
 			case "leave_room":
 				sess.forwardToRoom(rm, base.ClientMsgID, msgBytes, func() any {
 					var ev ws.LeaveRoomEvent

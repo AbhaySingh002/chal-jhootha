@@ -33,6 +33,7 @@ export interface GameStateEvent extends BaseServerEvent {
   winnerCount?: number;
   winnerCountLocked?: boolean;
   pendingFinishId?: string | null;
+  resultsLobbyPlayerIds?: string[];
   youAreController?: boolean;
   yourRole?: PlayerRole;
   lastMatch?: LastMatchSummary | null;

@@ -19,8 +19,12 @@ import { createFriendRequest, createRoomInvite, getFriendships, type Friendship 
 import { useGameStore } from '../state/gameStore';
 import { ThemeToggle } from './ThemeToggle';
 
-export const Lobby: React.FC = () => {
-  const { gameState, playerId, startGame, setConfig, leaveRoom, destroyRoom } = useGameStore();
+interface LobbyProps {
+  completedMatch?: boolean;
+}
+
+export const Lobby: React.FC<LobbyProps> = ({ completedMatch = false }) => {
+  const { gameState, playerId, startGame, setConfig, leaveRoom, destroyRoom, youAreController } = useGameStore();
   const { data: session } = useSession();
   const [copied, setCopied] = useState(false);
   const [showFriendsDrawer, setShowFriendsDrawer] = useState(false);
@@ -29,7 +33,7 @@ export const Lobby: React.FC = () => {
   const [friendRequestStatus, setFriendRequestStatus] = useState<Record<string, 'sent' | 'failed'>>({});
 
   const playerCount = gameState?.players.length ?? 0;
-  const isHost = gameState?.hostId === playerId;
+  const isHost = gameState?.hostId === playerId && youAreController;
   const maxWinners = Math.max(1, playerCount - 1);
   const currentDeckCount = gameState?.deckCount || 1;
   const currentWinnerCount = gameState?.winnerCount || 1;
@@ -37,12 +41,16 @@ export const Lobby: React.FC = () => {
   const rosterNeedsScroll = playerCount > 4;
   const isRegistered = session?.user?.isRegistered === true;
   const lastMatchNames = (gameState?.lastMatch?.winnerIds ?? []).map((winnerID) => gameState?.players.find((player) => player.id === winnerID)?.name || 'Unknown');
+  const requiredReturnees = (gameState?.players ?? []).filter((player) => !player.isDisconnected && !player.isAbandoned);
+  const returnedPlayerIDs = new Set(gameState?.resultsLobbyPlayerIds ?? []);
+  const missingReturnees = requiredReturnees.filter((player) => !returnedPlayerIDs.has(player.id));
+  const resultsLobbyReady = missingReturnees.length === 0;
 
   useEffect(() => {
-    if (!winnerCountLocked && isHost && playerCount >= 2 && currentWinnerCount > maxWinners) {
+    if (!completedMatch && !winnerCountLocked && isHost && playerCount >= 2 && currentWinnerCount > maxWinners) {
       setConfig(currentDeckCount, maxWinners);
     }
-  }, [winnerCountLocked, isHost, playerCount, currentWinnerCount, maxWinners, currentDeckCount, setConfig]);
+  }, [completedMatch, winnerCountLocked, isHost, playerCount, currentWinnerCount, maxWinners, currentDeckCount, setConfig]);
 
   useEffect(() => {
     if (showFriendsDrawer && isRegistered) {
@@ -61,7 +69,7 @@ export const Lobby: React.FC = () => {
     }
   }, [showFriendsDrawer, isRegistered]);
 
-  if (!gameState || gameState.phase !== 'lobby') return null;
+  if (!gameState || (gameState.phase !== 'lobby' && !completedMatch)) return null;
 
   const inviteUrl = `${window.location.origin}/room/${gameState.roomCode}`;
   const showMessage = (message: string) => {
@@ -144,7 +152,7 @@ export const Lobby: React.FC = () => {
           <span>Exit Room</span>
         </button>
 
-        {isHost ? (
+        {isHost && !completedMatch ? (
           <button
             type="button"
             onClick={() => {
@@ -174,7 +182,7 @@ export const Lobby: React.FC = () => {
                 </h1>
               </div>
 
-              <div className="lobby-action-group flex flex-wrap items-center gap-2 sm:gap-2.5" role="group" aria-label={`Invite players to room ${gameState.roomCode}`}>
+              <div className="lobby-action-group flex flex-wrap items-center gap-2 sm:gap-2.5" role="group" aria-label={`Room ${gameState.roomCode}`}>
                 <div
                   className="lobby-code-badge flex h-10 sm:h-11 items-center justify-center rounded-lg border-2 border-ink bg-surface px-3.5 font-mono shadow-[2px_2px_0_var(--color-ink)] select-all"
                   title="Room Code"
@@ -191,15 +199,17 @@ export const Lobby: React.FC = () => {
                   {copied ? <Check size={14} strokeWidth={2.5} className="text-confirmed-green" /> : <Copy size={14} strokeWidth={2.5} />}
                   <span>{copied ? 'Copied' : 'Copy'}</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={openInviteOptions}
-                  className="brutal-btn brutal-btn-compact inline-flex h-10 sm:h-11 items-center gap-1.5 rounded-lg border-2 border-ink bg-surface px-3.5 text-xs font-bold uppercase tracking-wider text-ink shadow-[2px_2px_0_var(--color-ink)] transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
-                  aria-label="Invite players"
-                >
-                  <Share2 size={14} strokeWidth={2.5} />
-                  <span>Invite</span>
-                </button>
+                {!completedMatch && (
+                  <button
+                    type="button"
+                    onClick={openInviteOptions}
+                    className="brutal-btn brutal-btn-compact inline-flex h-10 sm:h-11 items-center gap-1.5 rounded-lg border-2 border-ink bg-surface px-3.5 text-xs font-bold uppercase tracking-wider text-ink shadow-[2px_2px_0_var(--color-ink)] transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+                    aria-label="Invite players"
+                  >
+                    <Share2 size={14} strokeWidth={2.5} />
+                    <span>Invite</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -316,6 +326,7 @@ export const Lobby: React.FC = () => {
                     id="deck-count"
                     className="brutal-select text-sm"
                     value={currentDeckCount}
+                    disabled={completedMatch}
                     onChange={(event) => setConfig(Number(event.target.value), currentWinnerCount)}
                   >
                     <option value={1}>1 Deck (52 cards)</option>
@@ -342,7 +353,7 @@ export const Lobby: React.FC = () => {
                     id="winner-count"
                     className="brutal-select text-sm disabled:opacity-55"
                     value={winnerCountLocked ? currentWinnerCount : Math.min(currentWinnerCount, maxWinners)}
-                    disabled={winnerCountLocked}
+                    disabled={winnerCountLocked || completedMatch}
                     onChange={(event) => setConfig(currentDeckCount, Number(event.target.value))}
                   >
                     {Array.from({ length: winnerCountLocked ? 1 : maxWinners }, (_, i) =>
@@ -370,18 +381,25 @@ export const Lobby: React.FC = () => {
           </section>
 
           {isHost ? (
-            <button
-              type="button"
-              disabled={playerCount < 2}
-              onClick={startGame}
-              className="lobby-start-action brutal-btn flex w-full items-center justify-center gap-2 bg-confirmed-green text-white transition-transform active:scale-[0.98]"
-            >
-              <Trophy size={18} strokeWidth={2.5} />
-              <span>{playerCount < 2 ? 'Need 2+ Players' : `Start Match (${playerCount} Seated)`}</span>
-            </button>
+            <div className="space-y-2.5">
+              {completedMatch && !resultsLobbyReady ? (
+                <p className="border-2 border-ink bg-caution-yellow/40 p-3 text-center font-mono text-xs font-bold leading-5">
+                  Waiting for {missingReturnees.length} player{missingReturnees.length === 1 ? '' : 's'} to return to the lobby.
+                </p>
+              ) : null}
+              <button
+                type="button"
+                disabled={playerCount < 2 || (completedMatch && !resultsLobbyReady)}
+                onClick={startGame}
+                className="lobby-start-action brutal-btn flex w-full items-center justify-center gap-2 bg-confirmed-green text-white transition-transform active:scale-[0.98]"
+              >
+                <Trophy size={18} strokeWidth={2.5} />
+                <span>{playerCount < 2 ? 'Need 2+ Players' : `Start Match (${playerCount} Seated)`}</span>
+              </button>
+            </div>
           ) : (
             <div className="border-2 border-ink bg-caution-yellow/40 p-3.5 text-center font-mono text-xs font-bold leading-5">
-              Host will start the match once everyone is ready.
+              {completedMatch ? 'Waiting for the host to start the next match.' : 'Host will start the match once everyone is ready.'}
             </div>
           )}
         </aside>

@@ -160,12 +160,6 @@ func TestDealRandomFallbackWhenNoAce(t *testing.T) {
 	assert.Equal(t, "a", opener)
 }
 
-func TestSkipBurns(t *testing.T) {
-	opener := "p1"
-	assert.True(t, SkipBurns("p1", &opener))
-	assert.False(t, SkipBurns("p2", &opener))
-}
-
 func TestShouldEndGame(t *testing.T) {
 	players := []ws.Player{
 		{ID: "a", IsWinner: true},

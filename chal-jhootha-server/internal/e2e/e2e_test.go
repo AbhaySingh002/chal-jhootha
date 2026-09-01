@@ -536,7 +536,7 @@ func TestE2E_BottleneckAndThroughputReport(t *testing.T) {
 		// 4. Snapshot Marshaling Latency
 		t3 := time.Now()
 		roomObj := room.NewRoom(fmt.Sprintf("T%03d", i), nil)
-		_, err := roomObj.MarshalSnapshot()
+		_, err := roomObj.Snapshot(context.Background())
 		require.NoError(t, err)
 		totalSnapshotTime += time.Since(t3)
 		close(roomObj.CloseReq)

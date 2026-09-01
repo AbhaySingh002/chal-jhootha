@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Player } from 'shared';
 import clsx from 'clsx';
+import { CircleSlash, WifiOff } from 'lucide-react';
 import { useGameStore } from '../state/gameStore';
 
 export const PlayerSeat: React.FC<{ player: Player; position: number; total: number }> = ({ player, position, total }) => {
@@ -46,11 +47,17 @@ export const PlayerSeat: React.FC<{ player: Player; position: number; total: num
         "bg-surface text-ink shadow-[2px_2px_0_var(--color-ink)]"
       )}>
         {avatarMark}
-        <span
-          aria-label={presence === 'away' ? 'Away' : presence === 'abandoned' ? 'Abandoned' : 'Active'}
-          className={clsx('absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-surface', presenceColor)}
-          role="status"
-        />
+        {presence === 'away' ? (
+          <span aria-label="Disconnected" title="Disconnected" className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full border-2 border-surface bg-evidence-red text-white" role="status">
+            <WifiOff size={11} strokeWidth={3} aria-hidden="true" />
+          </span>
+        ) : presence === 'abandoned' ? (
+          <span aria-label="Abandoned spectator" title="Abandoned spectator" className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full border-2 border-surface bg-surface-muted text-ink-muted" role="status">
+            <CircleSlash size={11} strokeWidth={3} aria-hidden="true" />
+          </span>
+        ) : (
+          <span aria-label="Connected" className={clsx('absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-surface', presenceColor)} role="status" />
+        )}
       </div>
       <div className="game-seat-name mt-1 bg-surface border border-ink px-1.5 py-0.5 text-[10px] sm:text-[11px] font-bold font-mono text-ink uppercase shadow-[1px_1px_0_var(--color-ink)] max-w-[72px] sm:max-w-[100px] truncate rounded">
         {player.name}
@@ -58,10 +65,6 @@ export const PlayerSeat: React.FC<{ player: Player; position: number; total: num
       {isWinner ? (
         <div className="mt-0.5 bg-confirmed-green text-white border border-ink px-1.5 py-0.5 text-[9px] font-bold font-mono uppercase shadow-[1px_1px_0_var(--color-ink)] rounded">
           WINNER
-        </div>
-      ) : presence === 'away' ? (
-        <div className="mt-0.5 bg-evidence-red text-white border border-ink px-1.5 py-0.5 text-[9px] font-bold font-mono uppercase shadow-[1px_1px_0_var(--color-ink)] rounded">
-          AWAY
         </div>
       ) : (
         <div className="game-seat-cards mt-0.5 flex gap-1 items-center bg-ink text-paper border border-ink px-1.5 py-0.5 text-[9px] shadow-[1px_1px_0_var(--color-ink)] rounded">

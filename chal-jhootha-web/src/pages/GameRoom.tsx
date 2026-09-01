@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import type { Card as PlayingCard, GameState } from 'shared';
-import { ChevronUp, LogOut, Mic, MicOff, Radio, RotateCcw, SmilePlus, Volume2, VolumeX, X } from 'lucide-react';
+import { ChevronUp, LogOut, Mic, MicOff, Radio, SmilePlus, Volume2, VolumeX, X } from 'lucide-react';
 import { useLocation, useParams } from 'wouter';
 import { useSession } from '../lib/auth';
 import { ActionBar } from '../components/ActionBar';
@@ -120,10 +120,10 @@ const ActiveVoiceControls: React.FC<ActiveVoiceControlsProps> = ({ playerId, sen
   );
 };
 
-const DisabledVoiceControls: React.FC = () => (
+const DisabledVoiceControls: React.FC<{ reason?: string }> = ({ reason = 'Voice chat is disabled above eight players' }) => (
   <>
-    <button type="button" disabled className="game-voice-hitbox disabled:cursor-not-allowed disabled:opacity-45" aria-label="Voice chat unavailable for rooms over eight players" title="Voice chat is disabled above eight players"><span className="game-voice-control bg-surface text-ink-muted"><MicOff size={16} strokeWidth={2.5} /></span></button>
-    <button type="button" disabled className="game-voice-hitbox disabled:cursor-not-allowed disabled:opacity-45" aria-label="Voice chat unavailable for rooms over eight players" title="Voice chat is disabled above eight players"><span className="game-voice-control bg-surface text-ink-muted"><VolumeX size={16} strokeWidth={2.5} /></span></button>
+    <button type="button" disabled className="game-voice-hitbox disabled:cursor-not-allowed disabled:opacity-45" aria-label={reason} title={reason}><span className="game-voice-control bg-surface text-ink-muted"><MicOff size={16} strokeWidth={2.5} /></span></button>
+    <button type="button" disabled className="game-voice-hitbox disabled:cursor-not-allowed disabled:opacity-45" aria-label={reason} title={reason}><span className="game-voice-control bg-surface text-ink-muted"><VolumeX size={16} strokeWidth={2.5} /></span></button>
   </>
 );
 
@@ -131,8 +131,8 @@ export const GameRoom: React.FC = () => {
   const { code } = useParams<{ code: string }>();
   const [, setLocation] = useLocation();
   const {
-    gameState, isConnected, connectionStatus, playerId, roomCode, joinRoom, leaveRoom, resetSession, resetToLobby,
-    lastError, lastChallengeResult, lastBurned, sendVoice, sendReaction, yourRole, handsCount, myHand,
+    gameState, isConnected, connectionStatus, playerId, roomCode, joinRoom, leaveRoom, resetSession, returnToLobby,
+    lastError, lastChallengeResult, lastBurned, sendVoice, sendReaction, yourRole, youAreController, handsCount, myHand,
   } = useGameStore();
   const { data: session } = useSession();
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
@@ -335,7 +335,6 @@ export const GameRoom: React.FC = () => {
   const openingDeclarationActive = openingDeclarationOpen
     && gameState?.phase === 'playing'
     && gameState.currentTurnPlayerId === playerId
-    && gameState.roundOpenerId === playerId
     && gameState.stackCount === 0;
 
   const toggleSelect = (id: string) => {
@@ -344,6 +343,7 @@ export const GameRoom: React.FC = () => {
   };
 
   const voiceUnavailable = !!gameState && gameState.players.length > 8;
+  const canUseTableControls = isConnected && youAreController && yourRole === 'active';
 
   const handleLeaveGame = () => {
     if (connectionStatus !== 'CONNECTED') {
@@ -355,7 +355,7 @@ export const GameRoom: React.FC = () => {
   };
 
   const sendTableReaction = (emoji: string) => {
-    if (isConnected) sendReaction(emoji);
+    if (canUseTableControls) sendReaction(emoji);
   };
 
   /* ── Pre-game states ── */
@@ -415,14 +415,18 @@ export const GameRoom: React.FC = () => {
     );
   }
 
-  if (gameState.phase === 'lobby') return <Lobby />;
+  const hasReturnedToResultsLobby = gameState.phase === 'finished'
+    && !!playerId
+    && (gameState.resultsLobbyPlayerIds ?? []).includes(playerId);
+  if (gameState.phase === 'lobby' || hasReturnedToResultsLobby) {
+    return <Lobby completedMatch={hasReturnedToResultsLobby} />;
+  }
 
   /* ── Live game layout ── */
 
   const opponents = gameState.players.filter((player) => player.id !== playerId);
   const tableOpponents = opponents.slice(0, 5);
   const additionalPlayers = opponents.length - tableOpponents.length;
-  const isHost = gameState.hostId === playerId;
   let actionDescription = '';
   if (gameState.lastAction) {
     const actor = gameState.players.find((player) => player.id === gameState.lastAction?.playerId)?.name || 'A player';
@@ -443,7 +447,7 @@ export const GameRoom: React.FC = () => {
           <div className="flex items-center gap-1.5 sm:gap-2">
             <ThemeToggle />
             <div className="game-voice-controls">
-              {voiceUnavailable ? <DisabledVoiceControls /> : <ActiveVoiceControls key={playerId ?? 'pending'} playerId={playerId} sendVoice={sendVoice} onVoiceError={setVoiceError} />}
+              {voiceUnavailable ? <DisabledVoiceControls /> : !canUseTableControls ? <DisabledVoiceControls reason="Voice chat is unavailable while spectating" /> : <ActiveVoiceControls key={playerId ?? 'pending'} playerId={playerId} sendVoice={sendVoice} onVoiceError={setVoiceError} />}
             </div>
           </div>
         </header>
@@ -451,6 +455,7 @@ export const GameRoom: React.FC = () => {
         {/* ── Status banners ── */}
         {(isReconnecting || connectionStatus === 'SYNCING') ? <p role="status" className="border-b-2 border-ink bg-evidence-red px-3 py-2 text-center font-mono text-xs font-bold uppercase text-white">{connectionStatus === 'SYNCING' ? 'Syncing room state' : 'Connection lost. Reconnecting.'}</p> : null}
         {yourRole === 'winner_spectator' ? <p className="border-b-2 border-ink bg-confirmed-green px-3 py-2 text-center font-mono text-xs font-bold uppercase text-white">You finished this match. Spectator mode is on.</p> : null}
+        {yourRole === 'abandoned' ? <p className="border-b-2 border-ink bg-surface-muted px-3 py-2 text-center font-mono text-xs font-bold uppercase text-ink-muted">You are no longer active in this match. Spectator mode is on.</p> : null}
         {voiceUnavailable ? <p role="status" className="border-b-2 border-ink bg-surface-muted px-3 py-2 text-center font-mono text-xs font-bold uppercase text-ink-muted">Voice chat is disabled for rooms with more than 8 players.</p> : null}
       </div>
 
@@ -514,8 +519,9 @@ export const GameRoom: React.FC = () => {
                     onClick={() => {
                       sendTableReaction(emoji);
                     }}
+                    disabled={!canUseTableControls}
                     className="reaction-button"
-                    aria-label={`Send ${emoji} reaction`}
+                    aria-label={canUseTableControls ? `Send ${emoji} reaction` : 'Reactions are read-only while spectating'}
                   >
                     {emoji}
                   </button>
@@ -604,20 +610,16 @@ export const GameRoom: React.FC = () => {
             </div>
 
             <div className="mt-6 grid gap-2.5">
-              {isHost ? (
-                <button
-                  type="button"
-                  onClick={resetToLobby}
-                  className="brutal-btn flex items-center justify-center gap-2 bg-confirmed-green text-white"
-                >
-                  <RotateCcw size={17} strokeWidth={2.5} />
-                  <span>Play Again</span>
-                </button>
-              ) : (
-                <p className="border-2 border-ink bg-paper p-3 font-mono text-xs font-bold leading-5">
-                  Waiting for the host to start a new match...
-                </p>
-              )}
+              <button
+                type="button"
+                onClick={returnToLobby}
+                disabled={connectionStatus !== 'CONNECTED' || !youAreController}
+                className="brutal-btn flex items-center justify-center gap-2 bg-confirmed-green text-white disabled:cursor-not-allowed disabled:opacity-50"
+                title={youAreController ? 'Return only you to the lobby' : 'This device is read-only'}
+              >
+                <LogOut size={17} strokeWidth={2.5} />
+                <span>Return to Lobby</span>
+              </button>
               <button
                 type="button"
                 onClick={handleLeaveGame}

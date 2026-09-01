@@ -171,9 +171,3 @@ func IsClaimBluff(playedCards []ws.Card, claims []ws.ClaimGroup) bool {
 	}
 	return false
 }
-
-// SkipBurns is true when the player skipping is the round opener
-// (the turn has already circled back to them).
-func SkipBurns(skipperID string, roundOpenerID *string) bool {
-	return roundOpenerID != nil && *roundOpenerID == skipperID
-}

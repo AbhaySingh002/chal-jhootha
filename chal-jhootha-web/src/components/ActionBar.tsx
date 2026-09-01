@@ -19,12 +19,12 @@ export const ActionBar: React.FC<ActionBarProps> = ({ selectedCards, clearSelect
   const reduceMotion = useReducedMotion();
 
   if (!gameState || gameState.phase !== 'playing') return null;
-  if (!youAreController || yourRole === 'winner_spectator' || yourRole === 'abandoned') return null;
+  if (!youAreController || yourRole !== 'active') return null;
   if (connectionStatus !== 'CONNECTED') return <p className="border-2 border-ink bg-evidence-red px-3 py-2 text-center font-mono text-xs font-bold text-white">Waiting for a stable connection.</p>;
   if (pendingAction) return <p aria-live="polite" className="border-2 border-ink bg-caution-yellow px-3 py-2 text-center font-mono text-xs font-bold uppercase tracking-[0.08em] text-ink">{pendingAction.type.replace('_', ' ')}…</p>;
 
   const isMyTurn = gameState.currentTurnPlayerId === playerId;
-  const isOpeningPlay = isMyTurn && gameState.roundOpenerId === playerId && gameState.stackCount === 0;
+  const isOpeningPlay = isMyTurn && gameState.stackCount === 0;
   const hasSelected = selectedCards.length > 0;
   const exceedsOpeningLimit = isOpeningPlay && selectedCards.length > MAX_OPENING_CARD_COUNT;
   const activeSuspect = gameState.players.find((player) => player.id === gameState.currentTurnPlayerId)?.name || 'Another player';

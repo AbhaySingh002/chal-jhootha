@@ -1,12 +1,9 @@
 package logger
 
 import (
-	"context"
-	"fmt"
 	"io"
 	"log/slog"
 	"os"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -38,104 +35,6 @@ func init() {
 	SetLogger(os.Stdout, os.Getenv("LOG_FORMAT") == "json", os.Getenv("LOG_LEVEL") == "debug")
 }
 
-// Custom Pretty Handler for readable, high-speed terminal output
-type PrettyHandler struct {
-	w     io.Writer
-	level slog.Level
-}
-
-func (h *PrettyHandler) Enabled(_ context.Context, level slog.Level) bool {
-	return level >= h.level
-}
-
-func (h *PrettyHandler) Handle(_ context.Context, r slog.Record) error {
-	var lvlColor, tagColor string
-	switch {
-	case r.Level >= slog.LevelError:
-		lvlColor = colorRed + colorBold
-		tagColor = colorRed
-	case r.Level >= slog.LevelWarn:
-		lvlColor = colorYellow + colorBold
-		tagColor = colorYellow
-	case r.Level >= slog.LevelInfo:
-		lvlColor = colorGreen
-		tagColor = colorCyan
-	default:
-		lvlColor = colorGray
-		tagColor = colorMagenta
-	}
-
-	timeStr := r.Time.Format("15:04:05.000")
-	levelStr := fmt.Sprintf("%-5s", r.Level.String())
-
-	// Build key-value pairs
-	var tag, roomCode, playerID, connID, duration string
-	var otherAttrs []string
-
-	r.Attrs(func(a slog.Attr) bool {
-		switch a.Key {
-		case "tag":
-			tag = a.Value.String()
-		case "room":
-			roomCode = a.Value.String()
-		case "player":
-			playerID = a.Value.String()
-		case "conn":
-			connID = a.Value.String()
-		case "latency", "duration", "elapsed":
-			duration = a.Value.String()
-		default:
-			otherAttrs = append(otherAttrs, fmt.Sprintf("%s%s%s=%s%v%s", colorGray, a.Key, colorReset, colorWhite, a.Value.Any(), colorReset))
-		}
-		return true
-	})
-
-	if tag == "" {
-		tag = "APP"
-	}
-
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s%s%s %s[%s]%s %s[%-7s]%s %s%-32s%s",
-		colorDim, timeStr, colorReset,
-		lvlColor, levelStr, colorReset,
-		tagColor+colorBold, tag, colorReset,
-		colorBold, r.Message, colorReset,
-	))
-
-	if roomCode != "" {
-		sb.WriteString(fmt.Sprintf(" %sroom=%s%s%s", colorYellow, colorBold, roomCode, colorReset))
-	}
-	if playerID != "" {
-		sb.WriteString(fmt.Sprintf(" %splayer=%s%s%s", colorMagenta, colorBold, playerID, colorReset))
-	}
-	if connID != "" {
-		shortConn := connID
-		if len(shortConn) > 8 {
-			shortConn = shortConn[:8]
-		}
-		sb.WriteString(fmt.Sprintf(" %sconn=%s%s", colorCyan, shortConn, colorReset))
-	}
-	if duration != "" {
-		sb.WriteString(fmt.Sprintf(" %s⚡%s%s", colorGreen+colorBold, duration, colorReset))
-	}
-	if len(otherAttrs) > 0 {
-		sb.WriteString(" ")
-		sb.WriteString(strings.Join(otherAttrs, " "))
-	}
-	sb.WriteString("\n")
-
-	_, err := h.w.Write([]byte(sb.String()))
-	return err
-}
-
-func (h *PrettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return h
-}
-
-func (h *PrettyHandler) WithGroup(name string) slog.Handler {
-	return h
-}
-
 func SetLogger(w io.Writer, jsonFormat bool, isDebug bool) {
 	minLevel := slog.LevelInfo
 	if isDebug {
@@ -148,10 +47,9 @@ func SetLogger(w io.Writer, jsonFormat bool, isDebug bool) {
 			Level: minLevel,
 		})
 	} else {
-		handler = &PrettyHandler{
-			w:     w,
-			level: minLevel,
-		}
+		handler = slog.NewTextHandler(w, &slog.HandlerOptions{
+			Level: minLevel,
+		})
 	}
 	globalLogger = slog.New(handler)
 	slog.SetDefault(globalLogger)

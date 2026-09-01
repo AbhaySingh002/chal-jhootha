@@ -6,7 +6,7 @@ import { clearGuest, ensureGuest } from '../lib/auth';
 
 type PendingAction = {
   clientMsgId: string;
-  type: 'start_game' | 'reset_to_lobby' | 'set_config' | 'play_cards' | 'challenge' | 'skip' | 'leave_room' | 'destroy_room';
+  type: 'start_game' | 'reset_to_lobby' | 'return_to_lobby' | 'set_config' | 'play_cards' | 'challenge' | 'skip' | 'leave_room' | 'destroy_room';
   startedAt: number;
 };
 
@@ -31,6 +31,7 @@ interface GameStore {
   createRoom: (playerName: string, deckCount?: number, winnerCount?: number) => Promise<void>;
   startGame: () => void;
   resetToLobby: () => void;
+  returnToLobby: () => void;
   setConfig: (deckCount: number, winnerCount: number) => void;
   playCards: (cardIds: string[], claims?: ClaimGroup[]) => void;
   challenge: () => void;
@@ -57,6 +58,7 @@ const emptyState = (): Omit<GameState, 'roomCode' | 'phase' | 'players' | 'hostI
   deckCount: 1,
   winnerCount: 1,
   winnerCountLocked: false,
+  resultsLobbyPlayerIds: [],
 });
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -118,6 +120,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   startGame: () => {
+    const { connectionStatus, youAreController, pendingAction } = get();
+    if (connectionStatus !== 'CONNECTED' || !youAreController || pendingAction) return;
     const clientMsgId = crypto.randomUUID();
     set({ pendingAction: { clientMsgId, type: 'start_game', startedAt: Date.now() }, lastError: null });
     sendEvent({ type: 'start_game', clientMsgId, protocolVersion: PROTOCOL_VERSION });
@@ -127,6 +131,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const clientMsgId = crypto.randomUUID();
     set({ pendingAction: { clientMsgId, type: 'reset_to_lobby', startedAt: Date.now() }, lastError: null });
     sendEvent({ type: 'reset_to_lobby', clientMsgId, protocolVersion: PROTOCOL_VERSION });
+  },
+
+  returnToLobby: () => {
+    const { connectionStatus, youAreController, pendingAction } = get();
+    if (connectionStatus !== 'CONNECTED' || !youAreController || pendingAction) return;
+    const clientMsgId = crypto.randomUUID();
+    set({ pendingAction: { clientMsgId, type: 'return_to_lobby', startedAt: Date.now() }, lastError: null });
+    sendEvent({ type: 'return_to_lobby', clientMsgId, protocolVersion: PROTOCOL_VERSION });
   },
 
   setConfig: (deckCount, winnerCount) => {
@@ -143,7 +155,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   playCards: (cardIds, claims) => {
     const { lastSeq, connectionStatus, youAreController, yourRole, pendingAction } = get();
-    if (connectionStatus !== 'CONNECTED' || !youAreController || yourRole === 'winner_spectator' || pendingAction) return;
+    if (connectionStatus !== 'CONNECTED' || !youAreController || yourRole !== 'active' || pendingAction) return;
     const clientMsgId = crypto.randomUUID();
     set({ pendingAction: { clientMsgId, type: 'play_cards', startedAt: Date.now() }, lastError: null });
     sendEvent({
@@ -157,8 +169,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   challenge: () => {
-    const { lastSeq, connectionStatus, youAreController, pendingAction } = get();
-    if (connectionStatus !== 'CONNECTED' || !youAreController || pendingAction) return;
+    const { lastSeq, connectionStatus, youAreController, yourRole, pendingAction } = get();
+    if (connectionStatus !== 'CONNECTED' || !youAreController || yourRole !== 'active' || pendingAction) return;
     const clientMsgId = crypto.randomUUID();
     set({ pendingAction: { clientMsgId, type: 'challenge', startedAt: Date.now() }, lastError: null });
     sendEvent({
@@ -170,8 +182,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   skip: () => {
-    const { lastSeq, connectionStatus, youAreController, pendingAction } = get();
-    if (connectionStatus !== 'CONNECTED' || !youAreController || pendingAction) return;
+    const { lastSeq, connectionStatus, youAreController, yourRole, pendingAction } = get();
+    if (connectionStatus !== 'CONNECTED' || !youAreController || yourRole !== 'active' || pendingAction) return;
     const clientMsgId = crypto.randomUUID();
     set({ pendingAction: { clientMsgId, type: 'skip', startedAt: Date.now() }, lastError: null });
     sendEvent({
@@ -183,8 +195,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   leaveRoom: () => {
-    const { connectionStatus, pendingAction } = get();
-    if (connectionStatus !== 'CONNECTED' || pendingAction) return;
+    const { connectionStatus, youAreController, pendingAction } = get();
+    if (connectionStatus !== 'CONNECTED' || !youAreController || pendingAction) return;
     const clientMsgId = crypto.randomUUID();
     set({ pendingAction: { clientMsgId, type: 'leave_room', startedAt: Date.now() }, lastError: null });
     sendEvent({ type: 'leave_room', clientMsgId, protocolVersion: PROTOCOL_VERSION });
@@ -306,6 +318,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             winnerCount: event.winnerCount ?? state.gameState?.winnerCount ?? 1,
             winnerCountLocked: event.winnerCountLocked ?? state.gameState?.winnerCountLocked ?? false,
             lastMatch: event.lastMatch ?? state.gameState?.lastMatch ?? null,
+            resultsLobbyPlayerIds: state.gameState?.resultsLobbyPlayerIds ?? [],
           },
         });
         break;
@@ -340,6 +353,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               winnerCount: event.winnerCount ?? safe.winnerCount,
               winnerCountLocked: event.winnerCountLocked ?? safe.winnerCountLocked,
               pendingFinishId: event.pendingFinishId,
+              resultsLobbyPlayerIds: event.resultsLobbyPlayerIds ?? safe.resultsLobbyPlayerIds ?? [],
               lastMatch: event.lastMatch ?? safe.lastMatch ?? null,
             },
             handsCount: event.hands || {},
@@ -381,7 +395,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           lastSeq: event.seq,
           gameState: state.gameState ? {
             ...state.gameState,
-            players: state.gameState.players.map((player) => player.id === event.playerId ? { ...player, isDisconnected: false, isAbandoned: false } : player),
+            players: state.gameState.players.map((player) => player.id === event.playerId ? { ...player, isDisconnected: false } : player),
           } : null,
         });
         break;

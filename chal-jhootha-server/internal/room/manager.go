@@ -105,8 +105,24 @@ func (m *Manager) TrackUserRoom(userID, roomCode string) {
 	m.notifyPersistence()
 }
 
+// ClearUserRoom removes the advisory registered-user room mapping after a
+// deliberate leave. It also cancels an unwritten join mapping so a rapid
+// join-and-leave cannot reappear after the clear.
+func (m *Manager) ClearUserRoom(userID string) {
+	if m.store == nil || userID == "" {
+		return
+	}
+	m.persistMu.Lock()
+	delete(m.pendingUserRooms, userID)
+	err := m.store.ClearUserRoom(userID)
+	m.persistMu.Unlock()
+	if err != nil {
+		logger.Error("PERSIST", "Failed to clear user room", "user", userID, "error", err)
+	}
+}
+
 func (m *Manager) persistRoom(r *Room) {
-	raw, err := r.MarshalSnapshot()
+	raw, err := r.marshalSnapshot()
 	if err != nil {
 		logger.Error("PERSIST", "Failed to marshal room snapshot", "room", r.Code, "error", err)
 		return
@@ -415,7 +431,7 @@ func (m *Manager) Restore() {
 			}
 			continue
 		}
-		r, err := RestoreRoom([]byte(row.Snapshot), m.persistRoom)
+		r, err := restoreRoom([]byte(row.Snapshot), m.persistRoom, false)
 		if err != nil {
 			logger.Error("PERSIST", "Failed to restore room", "room", row.Code, "error", err)
 			continue
@@ -423,6 +439,7 @@ func (m *Manager) Restore() {
 		r.SetIdleTTL(m.idleTTL)
 		r.SetMatchRecorder(m.recordCompletedMatch)
 		r.SetDestroyHandler(m.DeleteRoom)
+		r.SetUserRoomClearer(m.ClearUserRoom)
 		m.configureRuntime(r)
 		if r.State.Phase == ws.PhaseFinished {
 			r.recordCompletedMatch()
@@ -430,9 +447,13 @@ func (m *Manager) Restore() {
 		m.rooms[r.Code] = r
 		if m.live != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			_ = m.live.SaveSnapshot(ctx, live.Snapshot{Code: r.Code, Raw: row.Snapshot, Seq: row.Seq})
+			raw, marshalErr := r.marshalSnapshot()
+			if marshalErr == nil {
+				_ = m.live.SaveSnapshot(ctx, live.Snapshot{Code: r.Code, Raw: string(raw), Seq: r.seq})
+			}
 			cancel()
 		}
+		r.startActor()
 		logger.IncActiveRooms()
 		logger.Info("PERSIST", "Room restored", "room", r.Code, "seq", r.seq, "phase", string(r.State.Phase))
 	}
@@ -445,7 +466,7 @@ func (m *Manager) restoreLiveSnapshots(snapshots []live.Snapshot) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, snapshot := range snapshots {
-		r, err := RestoreRoom([]byte(snapshot.Raw), m.persistRoom)
+		r, err := restoreRoom([]byte(snapshot.Raw), m.persistRoom, false)
 		if err != nil {
 			logger.Error("RUNTIME", "Failed to restore live room", "room", snapshot.Code, "error", err)
 			continue
@@ -453,8 +474,10 @@ func (m *Manager) restoreLiveSnapshots(snapshots []live.Snapshot) {
 		r.SetIdleTTL(m.idleTTL)
 		r.SetMatchRecorder(m.recordCompletedMatch)
 		r.SetDestroyHandler(m.DeleteRoom)
+		r.SetUserRoomClearer(m.ClearUserRoom)
 		m.configureRuntime(r)
 		m.rooms[r.Code] = r
+		r.startActor()
 		logger.IncActiveRooms()
 		logger.Info("RUNTIME", "Live room restored", "room", r.Code, "seq", r.seq)
 	}
@@ -522,6 +545,7 @@ func (m *Manager) GetOrCreateRoom(code string) *Room {
 	r.SetIdleTTL(m.idleTTL)
 	r.SetMatchRecorder(m.recordCompletedMatch)
 	r.SetDestroyHandler(m.DeleteRoom)
+	r.SetUserRoomClearer(m.ClearUserRoom)
 	m.configureRuntime(r)
 	m.rooms[code] = r
 	active := logger.IncActiveRooms()

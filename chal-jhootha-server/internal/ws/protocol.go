@@ -177,6 +177,12 @@ type ResetToLobbyEvent struct {
 	BaseClientEvent
 }
 
+// ReturnToLobbyEvent acknowledges the completed match for one player. The
+// room stays finished until the host starts the next match.
+type ReturnToLobbyEvent struct {
+	BaseClientEvent
+}
+
 // LeaveRoomEvent is an explicit lobby departure. It is deliberately separate
 // from a socket disconnect, which remains reconnectable.
 type LeaveRoomEvent struct {
@@ -204,27 +210,28 @@ type RoomStateEvent struct {
 }
 
 type GameStateEvent struct {
-	Type                string            `json:"type"`
-	Seq                 int               `json:"seq"`
-	Phase               GamePhase         `json:"phase"`
-	Players             []Player          `json:"players,omitempty"`
-	HostID              string            `json:"hostId,omitempty"`
-	Hands               map[string]int    `json:"hands"`
-	YourHand            []Card            `json:"yourHand,omitempty"`
-	StackCount          int               `json:"stackCount"`
-	ClaimedRank         *Rank             `json:"claimedRank"`
-	CurrentTurnPlayerID *string           `json:"currentTurnPlayerId"`
-	RoundOpenerID       *string           `json:"roundOpenerId"`
-	LastAction          *LastAction       `json:"lastAction"`
-	TopPlay             *TopPlay          `json:"topPlay,omitempty"`
-	Winners             []string          `json:"winners,omitempty"`
-	DeckCount           int               `json:"deckCount,omitempty"`
-	WinnerCount         int               `json:"winnerCount,omitempty"`
-	WinnerCountLocked   bool              `json:"winnerCountLocked"`
-	PendingFinishID     *string           `json:"pendingFinishId,omitempty"`
-	YouAreController    bool              `json:"youAreController"`
-	YourRole            PlayerRole        `json:"yourRole,omitempty"`
-	LastMatch           *LastMatchSummary `json:"lastMatch,omitempty"`
+	Type                  string            `json:"type"`
+	Seq                   int               `json:"seq"`
+	Phase                 GamePhase         `json:"phase"`
+	Players               []Player          `json:"players,omitempty"`
+	HostID                string            `json:"hostId,omitempty"`
+	Hands                 map[string]int    `json:"hands"`
+	YourHand              []Card            `json:"yourHand,omitempty"`
+	StackCount            int               `json:"stackCount"`
+	ClaimedRank           *Rank             `json:"claimedRank"`
+	CurrentTurnPlayerID   *string           `json:"currentTurnPlayerId"`
+	RoundOpenerID         *string           `json:"roundOpenerId"`
+	LastAction            *LastAction       `json:"lastAction"`
+	TopPlay               *TopPlay          `json:"topPlay,omitempty"`
+	Winners               []string          `json:"winners,omitempty"`
+	DeckCount             int               `json:"deckCount,omitempty"`
+	WinnerCount           int               `json:"winnerCount,omitempty"`
+	WinnerCountLocked     bool              `json:"winnerCountLocked"`
+	PendingFinishID       *string           `json:"pendingFinishId,omitempty"`
+	ResultsLobbyPlayerIDs []string          `json:"resultsLobbyPlayerIds,omitempty"`
+	YouAreController      bool              `json:"youAreController"`
+	YourRole              PlayerRole        `json:"yourRole,omitempty"`
+	LastMatch             *LastMatchSummary `json:"lastMatch,omitempty"`
 }
 
 type ChallengeResultEvent struct {

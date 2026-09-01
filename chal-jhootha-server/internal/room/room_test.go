@@ -430,7 +430,7 @@ func TestMidGameReconnectRestoresPrivateHandAndPresence(t *testing.T) {
 	}
 }
 
-func TestDisconnectedTurnAutoSkipsWithoutRemovingPlayer(t *testing.T) {
+func TestDisconnectedCurrentPlayerRemainsSeatedDuringTurnGrace(t *testing.T) {
 	r, clients := newPlayingRoom(t, "AUTO_SKIP", 2)
 	state := syncState(t, r, clients[0])
 	target := clientByID(t, clients, *state.CurrentTurnPlayerID)
@@ -441,9 +441,8 @@ func TestDisconnectedTurnAutoSkipsWithoutRemovingPlayer(t *testing.T) {
 	drain(observer.out)
 	r.Inbox <- room.RoomMessage{ConnectionID: target.conn, PlayerID: target.id, Event: room.InternalLeaveEvent{ConnectionID: target.conn}}
 	waitType(t, observer.out, "player_disconnected")
-	r.Inbox <- room.RoomMessage{PlayerID: target.id, Event: room.TimeoutSkipEvent{PlayerID: target.id}}
 	after := syncState(t, r, observer)
-	assert.NotEqual(t, target.id, *after.CurrentTurnPlayerID)
+	assert.Equal(t, target.id, *after.CurrentTurnPlayerID)
 	for _, player := range after.Players {
 		if player.ID == target.id {
 			assert.True(t, player.IsDisconnected)
@@ -451,7 +450,7 @@ func TestDisconnectedTurnAutoSkipsWithoutRemovingPlayer(t *testing.T) {
 	}
 }
 
-func TestLastCardAllSkipsWinsAndReturnsToLobby(t *testing.T) {
+func TestLastCardAllSkipsKeepsCompletedMatchVisible(t *testing.T) {
 	r, clients := newPlayingRoom(t, "LAST_SKIP", 3)
 	state := syncState(t, r, clients[0])
 	winner := clientByID(t, clients, *state.CurrentTurnPlayerID)
@@ -467,10 +466,10 @@ func TestLastCardAllSkipsWinsAndReturnsToLobby(t *testing.T) {
 	require.NoError(t, json.Unmarshal(waitType(t, winner.out, "player_won"), &won))
 	assert.Equal(t, winner.id, won.PlayerID)
 	assert.True(t, won.GameOver)
-	var lobby ws.RoomStateEvent
-	require.NoError(t, json.Unmarshal(waitType(t, winner.out, "room_state"), &lobby))
-	assert.Equal(t, ws.PhaseLobby, lobby.Phase)
-	assert.Equal(t, []string{winner.id}, lobby.LastMatch.WinnerIDs)
+	completed := syncState(t, r, winner)
+	assert.Equal(t, ws.PhaseFinished, completed.Phase)
+	assert.Equal(t, []string{winner.id}, completed.Winners)
+	assert.Empty(t, completed.ResultsLobbyPlayerIDs)
 }
 
 func TestLastCardTruthfulCalloutWinsAndBluffCalloutDoesNot(t *testing.T) {
@@ -488,7 +487,7 @@ func TestLastCardTruthfulCalloutWinsAndBluffCalloutDoesNot(t *testing.T) {
 		playCards(t, r, opener, syncState(t, r, opener).YourHand[:1], []ws.ClaimGroup{{Rank: finalCard.Rank, Count: 1}})
 		playCards(t, r, other, otherState.YourHand[:len(otherState.YourHand)-1], nil)
 		skipTurn(t, r, opener)
-		afterLastPlay := playCards(t, r, other, []ws.Card{finalCard}, []ws.ClaimGroup{{Rank: finalCard.Rank, Count: 1}})
+		afterLastPlay := playCards(t, r, other, []ws.Card{finalCard}, nil)
 		assert.Equal(t, opener.id, *afterLastPlay.CurrentTurnPlayerID)
 		challengeTurn(t, r, opener)
 		var won ws.PlayerWonEvent
@@ -523,8 +522,8 @@ func TestLastCardTruthfulCalloutWinsAndBluffCalloutDoesNot(t *testing.T) {
 	})
 }
 
-func TestLastCardResponseLapAcceptsPlayAndChallengesNewestTopPlay(t *testing.T) {
-	r, clients := newPlayingRoom(t, "LAST_LAP", 3)
+func TestLastCardCoveringAddConfirmsImmediately(t *testing.T) {
+	r, clients := newPlayingRoom(t, "LAST_COVER", 3)
 	state := syncState(t, r, clients[0])
 	winner := clientByID(t, clients, *state.CurrentTurnPlayerID)
 	hand := syncState(t, r, winner).YourHand
@@ -532,26 +531,17 @@ func TestLastCardResponseLapAcceptsPlayAndChallengesNewestTopPlay(t *testing.T) 
 	followUp := clientByID(t, clients, *afterLastPlay.CurrentTurnPlayerID)
 	followUpState := syncState(t, r, followUp)
 	require.NotNil(t, followUpState.ClaimedRank)
-	var bluffCard ws.Card
-	for _, card := range followUpState.YourHand {
-		if card.Rank != *followUpState.ClaimedRank {
-			bluffCard = card
-			break
-		}
-	}
-	require.NotEmpty(t, bluffCard.ID)
-	afterFollowUp := playCards(t, r, followUp, []ws.Card{bluffCard}, nil)
-	challenger := clientByID(t, clients, *afterFollowUp.CurrentTurnPlayerID)
-	challengeTurn(t, r, challenger)
+	coverCard := followUpState.YourHand[0]
+	playCards(t, r, followUp, []ws.Card{coverCard}, nil)
 
-	var result ws.ChallengeResultEvent
-	require.NoError(t, json.Unmarshal(waitType(t, challenger.out, "challenge_result"), &result))
-	assert.Equal(t, followUp.id, result.PlayedByID)
-	assert.True(t, result.WasBluff)
 	var won ws.PlayerWonEvent
 	require.NoError(t, json.Unmarshal(waitType(t, winner.out, "player_won"), &won))
 	assert.Equal(t, winner.id, won.PlayerID)
 	assert.True(t, won.GameOver)
+	completed := syncState(t, r, followUp)
+	assert.Equal(t, ws.PhaseFinished, completed.Phase)
+	require.NotNil(t, completed.TopPlay)
+	assert.Equal(t, followUp.id, completed.TopPlay.PlayerID)
 }
 
 func TestLastCardResponseLapSurvivesSnapshotRestore(t *testing.T) {
@@ -564,7 +554,7 @@ func TestLastCardResponseLapSurvivesSnapshotRestore(t *testing.T) {
 	skipTurn(t, r, firstResponder)
 	afterFirstResponse := syncState(t, r, winner)
 
-	raw, err := r.MarshalSnapshot()
+	raw, err := r.Snapshot(context.Background())
 	require.NoError(t, err)
 	restored, err := room.RestoreRoom(raw, nil)
 	require.NoError(t, err)
@@ -592,7 +582,7 @@ func TestLastCardResponseLapSurvivesSnapshotRestore(t *testing.T) {
 	assert.Equal(t, winner.id, won.PlayerID)
 }
 
-func TestMatchEndingAbandonReturnsToLobby(t *testing.T) {
+func TestMatchEndingAbandonKeepsCompletedMatchVisible(t *testing.T) {
 	r, clients := newPlayingRoom(t, "ABANDON_FINISH", 2)
 	state := syncState(t, r, clients[0])
 	abandoned := clientByID(t, clients, clients[0].id)
@@ -607,9 +597,8 @@ func TestMatchEndingAbandonReturnsToLobby(t *testing.T) {
 	r.Inbox <- room.RoomMessage{ConnectionID: abandoned.conn, PlayerID: abandoned.id, Event: room.InternalLeaveEvent{ConnectionID: abandoned.conn}}
 	waitType(t, observer.out, "player_disconnected")
 	r.Inbox <- room.RoomMessage{PlayerID: abandoned.id, Event: room.AbandonEvent{PlayerID: abandoned.id}}
-	var lobby ws.RoomStateEvent
-	require.NoError(t, json.Unmarshal(waitType(t, observer.out, "room_state"), &lobby))
-	assert.Equal(t, ws.PhaseLobby, lobby.Phase)
+	completed := syncState(t, r, observer)
+	assert.Equal(t, ws.PhaseFinished, completed.Phase)
 }
 
 func TestDuplicateAction(t *testing.T) {
@@ -742,7 +731,7 @@ func TestWinnerCountUnlocksWhenReturningToLobby(t *testing.T) {
 	require.Equal(t, 3, reconfigured.DeckCount)
 	require.Equal(t, 1, reconfigured.WinnerCount)
 
-	raw, err := r.MarshalSnapshot()
+	raw, err := r.Snapshot(context.Background())
 	require.NoError(t, err)
 	restored, err := room.RestoreRoom(raw, nil)
 	require.NoError(t, err)
@@ -761,7 +750,7 @@ func TestSnapshotRestore(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	require.True(t, m.HasRoom("SNAP"))
 
-	raw, err := r.MarshalSnapshot()
+	raw, err := r.Snapshot(context.Background())
 	require.NoError(t, err)
 	close(r.CloseReq)
 	time.Sleep(20 * time.Millisecond)
