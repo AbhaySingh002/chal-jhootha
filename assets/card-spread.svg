@@ -1,155 +1,290 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 340" width="1000" height="340">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 360" width="1060" height="360">
   <defs>
-    <!-- Paper Warmth and Gradients -->
-    <linearGradient id="cardIvory" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#FCFAF5"/>
-      <stop offset="100%" stop-color="#F3EFE6"/>
+    <!-- Card Stock Ivory Surface Gradient -->
+    <linearGradient id="ivoryCard" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFEFA"/>
+      <stop offset="40%" stop-color="#F9F6EE"/>
+      <stop offset="100%" stop-color="#F2ECE0"/>
     </linearGradient>
-    <linearGradient id="cardJoker" x1="0%" y1="0%" x2="0%" y2="100%">
+
+    <!-- Royal Joker Ivory Gradient -->
+    <linearGradient id="jokerCard" x1="0%" y1="0%" x2="0%" y2="100%">
       <stop offset="0%" stop-color="#FFFDF9"/>
-      <stop offset="100%" stop-color="#F5EFEB"/>
+      <stop offset="50%" stop-color="#FAF5EE"/>
+      <stop offset="100%" stop-color="#F2EAE0"/>
     </linearGradient>
-    
-    <!-- Card Drop Shadows -->
-    <filter id="cardShadow" x="-15%" y="-10%" width="135%" height="135%">
-      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000000" flood-opacity="0.32"/>
-      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.18"/>
-    </filter>
-    <filter id="heroShadow" x="-20%" y="-15%" width="145%" height="145%">
-      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.4"/>
-      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#C5A059" flood-opacity="0.25"/>
+
+    <!-- Gold Foil Gradient -->
+    <linearGradient id="goldFoil" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EED8A1"/>
+      <stop offset="40%" stop-color="#D4AF37"/>
+      <stop offset="100%" stop-color="#9C7726"/>
+    </linearGradient>
+
+    <!-- Rich Crimson Red Gradient -->
+    <linearGradient id="redGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E03833"/>
+      <stop offset="100%" stop-color="#B81E1A"/>
+    </linearGradient>
+
+    <!-- Deep Midnight Black Gradient -->
+    <linearGradient id="blackGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#22252E"/>
+      <stop offset="100%" stop-color="#121318"/>
+    </linearGradient>
+
+    <!-- Card Shadow Filters (Soft Physical Depth) -->
+    <filter id="softCardShadow" x="-20%" y="-15%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#000000" flood-opacity="0.45"/>
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.25"/>
     </filter>
 
-    <!-- Spade Path -->
-    <g id="spade">
-      <path d="M 0,-18 C -2,-18 -14,-7 -14,3 C -14,9 -8,14 0,14 C 8,14 14,9 14,3 C 14,-7 2,-18 0,-18 Z M -2,11 L -5,20 L 5,20 L 2,11 Z" fill="currentColor"/>
-    </g>
-    <!-- Heart Path -->
-    <g id="heart">
-      <path d="M 0,-6 C -2,-12 -8,-16 -13,-16 C -19,-16 -23,-11 -23,-4 C -23,6 -13,14 0,22 C 13,14 23,6 23,-4 C 23,-11 19,-16 13,-16 C 8,-16 2,-12 0,-6 Z" fill="currentColor" transform="scale(0.8)"/>
-    </g>
-    <!-- Diamond Path -->
-    <g id="diamond">
-      <path d="M 0,-18 L 13,0 L 0,18 L -13,0 Z" fill="currentColor"/>
-    </g>
-    <!-- Club Path -->
-    <g id="club">
-      <circle cx="0" cy="-7" r="8" fill="currentColor"/>
-      <circle cx="-8" cy="4" r="8" fill="currentColor"/>
-      <circle cx="8" cy="4" r="8" fill="currentColor"/>
-      <path d="M -2,7 L -4,18 L 4,18 L 2,7 Z" fill="currentColor"/>
-    </g>
+    <!-- Ace Glowing Elevation -->
+    <filter id="aceGlowShadow" x="-25%" y="-20%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="20" stdDeviation="22" flood-color="#000000" flood-opacity="0.55"/>
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#D4AF37" flood-opacity="0.35"/>
+    </filter>
   </defs>
 
-  <!-- Surface Base -->
-  <rect width="1000" height="340" rx="16" fill="#131417" stroke="#22242A" stroke-width="1.2"/>
+  <!-- Canvas Surface (Dark Luxury Felt) -->
+  <rect width="1060" height="360" rx="16" fill="#101114" stroke="#1F2128" stroke-width="1.2"/>
   
-  <!-- Subtle Table Felt Ring -->
-  <ellipse cx="500" cy="270" rx="420" ry="120" fill="#181A20" opacity="0.6"/>
+  <!-- Subtle Table Atmosphere -->
+  <ellipse cx="530" cy="280" rx="460" ry="110" fill="#161820" opacity="0.7"/>
 
-  <!-- ==================== CARD 1: 10 of Clubs (Rotated -14 deg) ==================== -->
-  <g transform="translate(230, 185) rotate(-14)" filter="url(#cardShadow)">
-    <!-- Body -->
-    <rect x="-70" y="-105" width="140" height="210" rx="10" fill="url(#cardIvory)" stroke="#DDD8CD" stroke-width="1"/>
-    <rect x="-64" y="-99" width="128" height="198" rx="7" fill="none" stroke="#EAE6DC" stroke-width="0.8"/>
-    <!-- Indices -->
-    <g fill="#1F2128" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif">
-      <text x="-56" y="-80" font-size="16" font-weight="800">10</text>
-      <use href="#club" x="-50" y="-62" transform="scale(0.55)"/>
-      <text x="56" y="86" font-size="16" font-weight="800" transform="rotate(180 50 80)">10</text>
-      <use href="#club" x="50" y="62" transform="rotate(180 50 62) scale(0.55)"/>
+  <!-- ================================================================= -->
+  <!-- CARD 1: JACK OF CLUBS (Rotated -14 deg)                           -->
+  <!-- ================================================================= -->
+  <g transform="translate(220, 195) rotate(-14)" filter="url(#softCardShadow)">
+    <!-- Base Card Body -->
+    <rect x="-74" y="-114" width="148" height="228" rx="12" fill="url(#ivoryCard)" stroke="#D6CFBF" stroke-width="1"/>
+    <!-- Ornate Inner Foil Border -->
+    <rect x="-66" y="-106" width="132" height="212" rx="8" fill="none" stroke="#D4AF37" stroke-width="0.8" opacity="0.6"/>
+    <rect x="-62" y="-102" width="124" height="204" rx="6" fill="none" stroke="#E2DCCE" stroke-width="0.6"/>
+    
+    <!-- Corner Filigree Notches -->
+    <path d="M-66,-96 L-56,-106 M66,-96 L56,-106 M-66,96 L-56,106 M66,96 L56,106" stroke="#D4AF37" stroke-width="0.8" opacity="0.7"/>
+
+    <!-- Indices Top-Left -->
+    <text x="-56" y="-84" font-family="'Georgia', serif" font-size="20" font-weight="bold" fill="#16181F">J</text>
+    <g transform="translate(-49, -67) scale(0.55)" fill="#16181F">
+      <circle cx="0" cy="-6" r="7"/>
+      <circle cx="-7" cy="3" r="7"/>
+      <circle cx="7" cy="3" r="7"/>
+      <path d="M -2,5 L -3,14 L 3,14 L 2,5 Z"/>
     </g>
-    <!-- Centerpiece -->
-    <g fill="#1F2128" transform="translate(0, 0)">
-      <use href="#club" transform="scale(1.4)"/>
+
+    <!-- Indices Bottom-Right (Inverted) -->
+    <g transform="rotate(180)">
+      <text x="-56" y="-84" font-family="'Georgia', serif" font-size="20" font-weight="bold" fill="#16181F">J</text>
+      <g transform="translate(-49, -67) scale(0.55)" fill="#16181F">
+        <circle cx="0" cy="-6" r="7"/>
+        <circle cx="-7" cy="3" r="7"/>
+        <circle cx="7" cy="3" r="7"/>
+        <path d="M -2,5 L -3,14 L 3,14 L 2,5 Z"/>
+      </g>
+    </g>
+
+    <!-- Centerpiece: Jack Heraldic Crest -->
+    <g transform="translate(0, 0)">
+      <!-- Oval Medallion -->
+      <ellipse cx="0" cy="0" rx="36" ry="46" fill="none" stroke="#D4AF37" stroke-width="1" opacity="0.7"/>
+      <ellipse cx="0" cy="0" rx="32" ry="42" fill="none" stroke="#DCD6C8" stroke-width="0.8" stroke-dasharray="2,2"/>
+      <!-- Heraldic Halberds -->
+      <path d="M-18,-24 L18,24 M18,-24 L-18,24" stroke="#D4AF37" stroke-width="1.2" opacity="0.5"/>
+      <!-- Trefoil Club -->
+      <g transform="scale(1.4)" fill="#16181F">
+        <circle cx="0" cy="-6" r="7"/>
+        <circle cx="-7" cy="3" r="7"/>
+        <circle cx="7" cy="3" r="7"/>
+        <path d="M -2,5 L -4,14 L 4,14 L 2,5 Z"/>
+      </g>
+      <!-- Gold Club Star Accent -->
+      <circle cx="0" cy="0" r="2.5" fill="#D4AF37"/>
     </g>
   </g>
 
-  <!-- ==================== CARD 2: Queen of Diamonds (Rotated -7 deg) ==================== -->
-  <g transform="translate(360, 175) rotate(-7)" filter="url(#cardShadow)">
-    <rect x="-70" y="-105" width="140" height="210" rx="10" fill="url(#cardIvory)" stroke="#DDD8CD" stroke-width="1"/>
-    <rect x="-64" y="-99" width="128" height="198" rx="7" fill="none" stroke="#EAE6DC" stroke-width="0.8"/>
-    <!-- Indices -->
-    <g fill="#D8433E" font-family="'Georgia', serif">
-      <text x="-56" y="-80" font-size="18" font-weight="bold">Q</text>
-      <use href="#diamond" x="-48" y="-60" transform="scale(0.6)"/>
-      <text x="56" y="86" font-size="18" font-weight="bold" transform="rotate(180 50 80)">Q</text>
-      <use href="#diamond" x="48" y="60" transform="rotate(180 48 60) scale(0.6)"/>
+  <!-- ================================================================= -->
+  <!-- CARD 2: QUEEN OF DIAMONDS (Rotated -7 deg)                        -->
+  <!-- ================================================================= -->
+  <g transform="translate(370, 185) rotate(-7)" filter="url(#softCardShadow)">
+    <rect x="-74" y="-114" width="148" height="228" rx="12" fill="url(#ivoryCard)" stroke="#D6CFBF" stroke-width="1"/>
+    <rect x="-66" y="-106" width="132" height="212" rx="8" fill="none" stroke="#D4AF37" stroke-width="0.8" opacity="0.6"/>
+    <rect x="-62" y="-102" width="124" height="204" rx="6" fill="none" stroke="#E2DCCE" stroke-width="0.6"/>
+    
+    <path d="M-66,-96 L-56,-106 M66,-96 L56,-106 M-66,96 L-56,106 M66,96 L56,106" stroke="#D4AF37" stroke-width="0.8" opacity="0.7"/>
+
+    <!-- Indices Top-Left -->
+    <text x="-58" y="-84" font-family="'Georgia', serif" font-size="20" font-weight="bold" fill="#C9322E">Q</text>
+    <path d="M-49,-75 L-42,-64 L-49,-53 L-56,-64 Z" fill="#C9322E"/>
+
+    <!-- Indices Bottom-Right (Inverted) -->
+    <g transform="rotate(180)">
+      <text x="-58" y="-84" font-family="'Georgia', serif" font-size="20" font-weight="bold" fill="#C9322E">Q</text>
+      <path d="M-49,-75 L-42,-64 L-49,-53 L-56,-64 Z" fill="#C9322E"/>
     </g>
-    <!-- Center Pattern -->
-    <g fill="#D8433E" transform="translate(0, 0)">
-      <use href="#diamond" transform="scale(1.5)"/>
-      <circle cx="0" cy="0" r="28" fill="none" stroke="#F0C0BE" stroke-width="1.2" stroke-dasharray="3,3"/>
+
+    <!-- Centerpiece: Royal Queen Tiara & Faceted Diamond Prism -->
+    <g transform="translate(0, 0)">
+      <circle cx="0" cy="0" r="42" fill="none" stroke="#D4AF37" stroke-width="1" opacity="0.6"/>
+      <circle cx="0" cy="0" r="38" fill="none" stroke="#E5B2B0" stroke-width="0.8" stroke-dasharray="3,3"/>
+      
+      <!-- Queen Tiara -->
+      <path d="M -14,-22 L -8,-14 L 0,-24 L 8,-14 L 14,-22 L 10,-8 L -10,-8 Z" fill="#D4AF37" opacity="0.9"/>
+      
+      <!-- Faceted Red Diamond -->
+      <path d="M 0,-14 L 18,6 L 0,26 L -18,6 Z" fill="#C9322E"/>
+      <path d="M 0,-14 L 0,26 L 18,6 Z" fill="#A8201C" opacity="0.3"/>
+      <!-- Inner Diamond Highlights -->
+      <path d="M 0,-4 L 7,6 L 0,16 L -7,6 Z" fill="none" stroke="#F5C2C0" stroke-width="1"/>
     </g>
   </g>
 
-  <!-- ==================== CARD 3: King of Hearts (Rotated 0 deg - Elevated) ==================== -->
-  <g transform="translate(500, 160)" filter="url(#cardShadow)">
-    <rect x="-72" y="-110" width="144" height="220" rx="10" fill="url(#cardIvory)" stroke="#D8D2C5" stroke-width="1"/>
-    <rect x="-65" y="-103" width="130" height="206" rx="7" fill="none" stroke="#E5DFD3" stroke-width="0.8"/>
-    <!-- Indices -->
-    <g fill="#CC332D" font-family="'Georgia', serif">
-      <text x="-58" y="-84" font-size="20" font-weight="bold">K</text>
-      <use href="#heart" x="-48" y="-62" transform="scale(0.65)"/>
-      <text x="58" y="90" font-size="20" font-weight="bold" transform="rotate(180 52 84)">K</text>
-      <use href="#heart" x="48" y="62" transform="rotate(180 48 62) scale(0.65)"/>
+  <!-- ================================================================= -->
+  <!-- CARD 3: KING OF HEARTS (Rotated 0 deg - Sovereign Centerpiece)   -->
+  <!-- ================================================================= -->
+  <g transform="translate(530, 168)" filter="url(#softCardShadow)">
+    <rect x="-76" y="-118" width="152" height="236" rx="12" fill="url(#ivoryCard)" stroke="#D4AF37" stroke-width="1.2"/>
+    <rect x="-68" y="-110" width="136" height="220" rx="8" fill="none" stroke="#D4AF37" stroke-width="1" opacity="0.7"/>
+    <rect x="-64" y="-106" width="128" height="212" rx="6" fill="none" stroke="#E2DCCE" stroke-width="0.6"/>
+
+    <path d="M-68,-100 L-58,-110 M68,-100 L58,-110 M-68,100 L-58,110 M68,100 L58,110" stroke="#D4AF37" stroke-width="1" opacity="0.8"/>
+
+    <!-- Indices Top-Left -->
+    <text x="-60" y="-88" font-family="'Georgia', serif" font-size="22" font-weight="bold" fill="#C9322E">K</text>
+    <!-- Explicit Red Heart Pip -->
+    <path d="M -50,-74 C -51,-78 -54,-81 -58,-81 C -62,-81 -65,-77 -65,-72 C -65,-65 -58,-60 -50,-53 C -42,-60 -35,-65 -35,-72 C -35,-77 -38,-81 -42,-81 C -46,-81 -49,-78 -50,-74 Z" fill="#C9322E" transform="translate(0, 5) scale(0.6)"/>
+
+    <!-- Indices Bottom-Right (Inverted) -->
+    <g transform="rotate(180)">
+      <text x="-60" y="-88" font-family="'Georgia', serif" font-size="22" font-weight="bold" fill="#C9322E">K</text>
+      <path d="M -50,-74 C -51,-78 -54,-81 -58,-81 C -62,-81 -65,-77 -65,-72 C -65,-65 -58,-60 -50,-53 C -42,-60 -35,-65 -35,-72 C -35,-77 -38,-81 -42,-81 C -46,-81 -49,-78 -50,-74 Z" fill="#C9322E" transform="translate(0, 5) scale(0.6)"/>
     </g>
-    <!-- Center Piece -->
-    <g fill="#CC332D" transform="translate(0, -6)">
-      <use href="#heart" transform="scale(1.7)"/>
-      <!-- Royal Crown Filigree -->
-      <path d="M-18,-24 L-12,-16 L0,-28 L12,-16 L18,-24 L14,-10 L-14,-10 Z" fill="#C5A059" opacity="0.9"/>
+
+    <!-- Centerpiece: The Sovereign King with Crown & Sword -->
+    <g transform="translate(0, -4)">
+      <!-- Gold Regal Halo -->
+      <circle cx="0" cy="6" r="44" fill="none" stroke="#D4AF37" stroke-width="1.2" opacity="0.8"/>
+      <circle cx="0" cy="6" r="40" fill="none" stroke="#E2DCCE" stroke-width="0.8" stroke-dasharray="2,2"/>
+      
+      <!-- Suicide King Sword Motif Behind Crown -->
+      <line x1="-30" y1="-28" x2="30" y2="-28" stroke="#D4AF37" stroke-width="1.5"/>
+      <polygon points="-30,-31 -35,-28 -30,-25" fill="#D4AF37"/>
+      <circle cx="30" cy="-28" r="3" fill="#D4AF37"/>
+
+      <!-- Ornate Gold Royal Crown -->
+      <path d="M -22,-20 L -14,-10 L 0,-24 L 14,-10 L 22,-20 L 16,-4 L -16,-4 Z" fill="url(#goldFoil)"/>
+      <circle cx="-22" cy="-20" r="2" fill="#FAF5EE"/>
+      <circle cx="0" cy="-24" r="2.5" fill="#FAF5EE"/>
+      <circle cx="22" cy="-20" r="2" fill="#FAF5EE"/>
+
+      <!-- Grand Crimson Heart Crest -->
+      <g transform="translate(0, 16) scale(1.1)">
+        <path d="M 0,-10 C -2,-18 -10,-24 -18,-24 C -27,-24 -33,-17 -33,-7 C -33,7 -19,18 0,32 C 19,18 33,7 33,-7 C 33,-17 27,-24 18,-24 C 10,-24 2,-18 0,-10 Z" fill="url(#redGrad)"/>
+        <!-- Inner Filigree Heart Line -->
+        <path d="M 0,-4 C -1,-10 -6,-15 -12,-15 C -18,-15 -22,-10 -22,-3 C -22,6 -12,14 0,23 C 12,14 22,6 22,-3 C 22,-10 18,-15 12,-15 C 6,-15 1,-10 0,-4 Z" fill="none" stroke="#FCE8E6" stroke-width="1" opacity="0.6"/>
+      </g>
     </g>
   </g>
 
-  <!-- ==================== CARD 4: ACE OF SPADES (The Opener - Rotated +7 deg) ==================== -->
-  <g transform="translate(640, 175) rotate(7)" filter="url(#heroShadow)">
-    <rect x="-72" y="-110" width="144" height="220" rx="10" fill="url(#cardIvory)" stroke="#C8A663" stroke-width="1.5"/>
-    <rect x="-65" y="-103" width="130" height="206" rx="7" fill="none" stroke="#E6D7B5" stroke-width="0.8"/>
-    <!-- Indices -->
-    <g fill="#16181E" font-family="'Georgia', serif">
-      <text x="-58" y="-84" font-size="20" font-weight="bold">A</text>
-      <use href="#spade" x="-48" y="-62" transform="scale(0.65)"/>
-      <text x="58" y="90" font-size="20" font-weight="bold" transform="rotate(180 52 84)">A</text>
-      <use href="#spade" x="48" y="62" transform="rotate(180 48 62) scale(0.65)"/>
+  <!-- ================================================================= -->
+  <!-- CARD 4: ACE OF SPADES (The Opener - Rotated +7 deg)               -->
+  <!-- ================================================================= -->
+  <g transform="translate(685, 185) rotate(7)" filter="url(#aceGlowShadow)">
+    <rect x="-76" y="-118" width="152" height="236" rx="12" fill="url(#ivoryCard)" stroke="#D4AF37" stroke-width="1.8"/>
+    <rect x="-68" y="-110" width="136" height="220" rx="8" fill="none" stroke="#D4AF37" stroke-width="1" opacity="0.8"/>
+    <rect x="-64" y="-106" width="128" height="212" rx="6" fill="none" stroke="#E2DCCE" stroke-width="0.6"/>
+
+    <path d="M-68,-100 L-58,-110 M68,-100 L58,-110 M-68,100 L-58,110 M68,100 L58,110" stroke="#D4AF37" stroke-width="1.2"/>
+
+    <!-- Indices Top-Left -->
+    <text x="-60" y="-88" font-family="'Georgia', serif" font-size="22" font-weight="bold" fill="#14161E">A</text>
+    <path d="M -50,-78 C -52,-78 -59,-71 -59,-65 C -59,-61 -55,-58 -50,-58 C -45,-58 -41,-61 -41,-65 C -41,-71 -48,-78 -50,-78 Z M -51,-60 L -53,-53 L -47,-53 L -49,-60 Z" fill="#14161E" transform="scale(0.85) translate(-10, -10)"/>
+
+    <!-- Indices Bottom-Right (Inverted) -->
+    <g transform="rotate(180)">
+      <text x="-60" y="-88" font-family="'Georgia', serif" font-size="22" font-weight="bold" fill="#14161E">A</text>
+      <path d="M -50,-78 C -52,-78 -59,-71 -59,-65 C -59,-61 -55,-58 -50,-58 C -45,-58 -41,-61 -41,-65 C -41,-71 -48,-78 -50,-78 Z M -51,-60 L -53,-53 L -47,-53 L -49,-60 Z" fill="#14161E" transform="scale(0.85) translate(-10, -10)"/>
     </g>
-    <!-- Intricate Guilloche Ace Centerpiece -->
-    <g fill="#16181E" transform="translate(0, 0)">
-      <circle cx="0" cy="0" r="34" fill="none" stroke="#C5A059" stroke-width="1" opacity="0.5"/>
-      <circle cx="0" cy="0" r="30" fill="none" stroke="#16181E" stroke-width="0.8" stroke-dasharray="2,2"/>
-      <use href="#spade" transform="scale(2)"/>
-      <text x="0" y="44" font-family="monospace" font-size="7.5" font-weight="700" fill="#C5A059" text-anchor="middle" letter-spacing="0.2em">
-        ROUND OPENER
-      </text>
+
+    <!-- Masterpiece Guilloche Ace Centerpiece -->
+    <g transform="translate(0, -2)">
+      <!-- Sunburst Radiance -->
+      <circle cx="0" cy="0" r="44" fill="none" stroke="#D4AF37" stroke-width="1.2" opacity="0.6"/>
+      <circle cx="0" cy="0" r="40" fill="none" stroke="#161820" stroke-width="0.8" stroke-dasharray="2,2"/>
+      <circle cx="0" cy="0" r="36" fill="none" stroke="#D4AF37" stroke-width="0.6"/>
+
+      <!-- Grand Ornate Ace of Spades Body -->
+      <path d="M 0,-34 C -4,-34 -24,-13 -24,7 C -24,19 -13,28 0,28 C 13,28 24,19 24,7 C 24,-13 4,-34 0,-34 Z M -4,22 L -8,38 L 8,38 L 4,22 Z" fill="url(#blackGrad)"/>
+      
+      <!-- Internal Victorian Engraving (White & Gold Filigree) -->
+      <path d="M 0,-24 C -2,-24 -15,-9 -15,5 C -15,12 -8,18 0,18 C 8,18 15,12 15,5 C 15,-9 2,-24 0,-24 Z" fill="none" stroke="#D4AF37" stroke-width="1" opacity="0.8"/>
+      <circle cx="0" cy="2" r="5" fill="#D4AF37"/>
+      <circle cx="0" cy="2" r="2.5" fill="#101114"/>
+
+      <!-- Opener Banner Ribbon -->
+      <g transform="translate(0, 52)">
+        <rect x="-44" y="-9" width="88" height="18" rx="5" fill="#14161F" stroke="#D4AF37" stroke-width="0.8"/>
+        <text x="0" y="3" font-family="ui-monospace, monospace" font-size="7.5" font-weight="800" fill="#EED8A1" text-anchor="middle" letter-spacing="0.16em">
+          EARLIEST A♠ OPENS
+        </text>
+      </g>
     </g>
   </g>
 
-  <!-- ==================== CARD 5: JHOOTHA JOKER (Rotated +14 deg) ==================== -->
-  <g transform="translate(770, 185) rotate(14)" filter="url(#cardShadow)">
-    <rect x="-70" y="-105" width="140" height="210" rx="10" fill="url(#cardJoker)" stroke="#DDD8CD" stroke-width="1"/>
-    <rect x="-64" y="-99" width="128" height="198" rx="7" fill="none" stroke="#EAE6DC" stroke-width="0.8"/>
-    <!-- Indices -->
-    <g fill="#E5484D" font-family="-apple-system, BlinkMacSystemFont, sans-serif">
-      <text x="-58" y="-78" font-size="12" font-weight="900">JOKER</text>
-      <text x="-56" y="-60" font-size="14" font-weight="bold">★</text>
-      <text x="58" y="84" font-size="12" font-weight="900" transform="rotate(180 48 78)">JOKER</text>
-      <text x="56" y="66" font-size="14" font-weight="bold" transform="rotate(180 50 60)">★</text>
+  <!-- ================================================================= -->
+  <!-- CARD 5: CHAL JHOOTHA JOKER (Rotated +14 deg)                      -->
+  <!-- ================================================================= -->
+  <g transform="translate(835, 195) rotate(14)" filter="url(#softCardShadow)">
+    <rect x="-74" y="-114" width="148" height="228" rx="12" fill="url(#jokerCard)" stroke="#D6CFBF" stroke-width="1"/>
+    <rect x="-66" y="-106" width="132" height="212" rx="8" fill="none" stroke="#D4AF37" stroke-width="0.8" opacity="0.6"/>
+    <rect x="-62" y="-102" width="124" height="204" rx="6" fill="none" stroke="#E2DCCE" stroke-width="0.6"/>
+
+    <path d="M-66,-96 L-56,-106 M66,-96 L56,-106 M-66,96 L-56,106 M66,96 L56,106" stroke="#D4AF37" stroke-width="0.8" opacity="0.7"/>
+
+    <!-- Indices Top-Left -->
+    <text x="-58" y="-86" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11" font-weight="900" fill="#C9322E" letter-spacing="0.08em">JOKER</text>
+    <text x="-52" y="-68" font-size="16" font-weight="bold" fill="#C9322E">★</text>
+
+    <!-- Indices Bottom-Right (Inverted) -->
+    <g transform="rotate(180)">
+      <text x="-58" y="-86" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11" font-weight="900" fill="#C9322E" letter-spacing="0.08em">JOKER</text>
+      <text x="-52" y="-68" font-size="16" font-weight="bold" fill="#C9322E">★</text>
     </g>
-    <!-- Center Jester Trickster Star -->
-    <g fill="#E5484D" transform="translate(0, 0)">
-      <polygon points="0,-24 7,-8 24,-8 11,4 16,22 0,11 -16,22 -11,4 -24,-8 -7,-8" fill="#E5484D"/>
-      <circle cx="0" cy="0" r="6" fill="#FFFDF9"/>
-      <text x="0" y="38" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="8" font-weight="800" fill="#181A20" text-anchor="middle" letter-spacing="0.12em">
+
+    <!-- Centerpiece: Jester Trickster Star & Bluff Seal -->
+    <g transform="translate(0, 0)">
+      <!-- Outer Seal Ring -->
+      <circle cx="0" cy="0" r="42" fill="none" stroke="#D4AF37" stroke-width="1" opacity="0.7"/>
+      <circle cx="0" cy="0" r="38" fill="none" stroke="#E5B5B2" stroke-width="0.8" stroke-dasharray="2,2"/>
+
+      <!-- Twin Jester Caps -->
+      <path d="M -18,-18 C -16,-28 -2,-28 0,-18 C 2,-28 16,-28 18,-18 C 8,-12 4,-8 0,-6 C -4,-8 -8,-12 -18,-18 Z" fill="#D4AF37" opacity="0.85"/>
+      <circle cx="-16" cy="-24" r="2" fill="#FAF5EE"/>
+      <circle cx="16" cy="-24" r="2" fill="#FAF5EE"/>
+
+      <!-- 8-Pointed Star of Deception -->
+      <g transform="translate(0, 4) scale(1.1)">
+        <polygon points="0,-22 6,-7 22,-7 10,4 14,20 0,10 -14,20 -10,4 -22,-7 -6,-7" fill="url(#redGrad)"/>
+        <!-- Center Pierced Eye -->
+        <circle cx="0" cy="2" r="5" fill="#FFFDF9"/>
+        <circle cx="0" cy="2" r="2.5" fill="#14161D"/>
+      </g>
+
+      <!-- Signature Chal Jhootha Mark -->
+      <text x="0" y="44" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="8.5" font-weight="900" fill="#181A20" text-anchor="middle" letter-spacing="0.14em">
         CHAL JHOOTHA
       </text>
     </g>
   </g>
 
-  <!-- Bottom Floating Annotation Badge -->
-  <g transform="translate(500, 305)" text-anchor="middle">
-    <rect x="-170" y="-13" width="340" height="26" rx="13" fill="#191B21" stroke="#2D3039" stroke-width="1"/>
-    <text x="0" y="4" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="10.5" font-weight="600" fill="#9BA1B0" letter-spacing="0.08em">
-      1–3 DECKS DEALT EVENLY  ·  EARLIEST <tspan fill="#E2C992">A♠</tspan> OPENS
+  <!-- ================================================================= -->
+  <!-- BOTTOM FLOATING ANNOTATION PILL                                  -->
+  <!-- ================================================================= -->
+  <g transform="translate(530, 322)" text-anchor="middle">
+    <rect x="-180" y="-13" width="360" height="26" rx="13" fill="#16181F" stroke="#2B2E38" stroke-width="1"/>
+    <text x="0" y="4.5" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="11" font-weight="600" fill="#9BA1B0" letter-spacing="0.08em">
+      1–3 DECKS DEALT EVENLY  ·  EARLIEST <tspan fill="#EED8A1" font-weight="bold">A♠</tspan> OPENS
     </text>
   </g>
 </svg>
