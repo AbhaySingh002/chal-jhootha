@@ -81,7 +81,7 @@ export const Home: React.FC = () => {
     <div className="page-shell home-shell">
       <Navbar currentTab="play" />
 
-      <main id="main-content" className="home-main page-container grid items-start gap-6 pb-12 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,28rem)] lg:gap-12 lg:pt-4">
+      <main id="main-content" className="home-main page-container grid items-start gap-6 pb-12 lg:grid-cols-[minmax(0,1.35fr)_minmax(22rem,28rem)] xl:grid-cols-[minmax(0,1.4fr)_minmax(24rem,30rem)] lg:gap-12 xl:gap-16 lg:pt-6 xl:pt-10 max-w-7xl">
         {/* Left Hero Section */}
         <motion.section
           initial={{ opacity: 0, y: 14 }}
@@ -187,11 +187,17 @@ export const Home: React.FC = () => {
           className="home-match brutal-card w-full p-5 sm:p-7"
           aria-labelledby="match-hub-title"
         >
-          <div className="mb-5 border-b-2 border-ink pb-3.5">
-            <h2 id="match-hub-title" className="font-display text-2xl uppercase tracking-tight sm:text-3xl">
-              Match Hub
-            </h2>
-            <p className="mt-0.5 font-mono text-xs text-ink-muted">Create a private room or enter a code</p>
+          <div className="mb-5 flex items-start justify-between border-b-2 border-ink pb-3.5">
+            <div>
+              <h2 id="match-hub-title" className="font-display text-2xl uppercase tracking-tight sm:text-3xl">
+                Match Hub
+              </h2>
+              <p className="mt-0.5 font-mono text-xs text-ink-muted">Create a private room or enter a code</p>
+            </div>
+            <div className="hidden lg:flex items-center gap-1.5 rounded-full border border-confirmed-green/30 bg-confirmed-green/10 px-2.5 py-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-confirmed-green animate-pulse" />
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-confirmed-green">Live Gateway</span>
+            </div>
           </div>
 
           {/* Signed In Identity vs Guest Name */}
@@ -225,7 +231,7 @@ export const Home: React.FC = () => {
                 placeholder="YOUR NAME"
                 value={guestName}
                 onChange={(event) => setGuestName(event.target.value.toUpperCase())}
-                className="brutal-input text-center uppercase"
+                className="brutal-input text-center uppercase tracking-[0.15em] font-mono"
                 autoComplete="nickname"
               />
             </div>
@@ -236,7 +242,7 @@ export const Home: React.FC = () => {
             type="button"
             onClick={handleCreate}
             disabled={isCreating || (!isRegistered && !guestName.trim())}
-            className="brutal-btn flex w-full items-center justify-center gap-2 bg-confirmed-green text-white transition-transform active:scale-[0.98]"
+            className="brutal-btn flex w-full items-center justify-center gap-2 bg-confirmed-green lg:bg-ink lg:text-surface lg:hover:bg-ink/90 text-white transition-all active:scale-[0.98]"
           >
             {isCreating ? (
               <>
@@ -277,7 +283,7 @@ export const Home: React.FC = () => {
                 placeholder="ABCD"
                 value={code}
                 onChange={(event) => setCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-                className="brutal-input text-center text-xl uppercase tracking-[0.3em]"
+                className="brutal-input text-center text-xl uppercase tracking-[0.3em] font-mono font-bold"
                 maxLength={4}
                 autoComplete="off"
               />
@@ -285,10 +291,11 @@ export const Home: React.FC = () => {
             <button
               type="submit"
               disabled={code.trim().length !== 4 || (!isRegistered && !guestName.trim())}
-              className="brutal-btn flex w-full items-center justify-center gap-2 bg-caution-yellow text-ink transition-transform active:scale-[0.98]"
+              className="brutal-btn flex w-full items-center justify-center gap-2 bg-caution-yellow text-ink transition-all active:scale-[0.98]"
             >
               <span>Join Room</span>
               <ArrowRight size={16} strokeWidth={2.5} />
+              <kbd className="hidden lg:inline-flex ml-1 px-1.5 py-0.5 text-[10px] font-mono font-normal rounded border border-ink/20 bg-surface/60 text-ink-muted">↵</kbd>
             </button>
           </form>
         </motion.section>

@@ -893,3 +893,57 @@
 
   .game-opening-declaration { gap: 0.4rem; padding: 0.4rem; }
 }
+
+/* ──────────────────────────────────────────────────────────
+   DESKTOP-ONLY MINIMALIST POLISH (lg: 1024px+)
+   Preserves mobile & tablet 100%. Refines elevation, borders,
+   and interactive spring physics for desktop viewports.
+   ────────────────────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  .home-shell {
+    background-image: radial-gradient(circle at 65% 35%, rgba(212, 175, 55, 0.035), transparent 45%);
+  }
+
+  .home-match.brutal-card {
+    border-width: 1.5px;
+    border-color: rgba(23, 23, 23, 0.15);
+    box-shadow: 0 20px 45px -15px rgba(0, 0, 0, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    transition: box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  :root[data-theme="dark"] .home-match.brutal-card {
+    border-color: rgba(244, 239, 228, 0.12);
+    box-shadow: 0 25px 50px -20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .hero-card-vector--back,
+  .hero-card-vector--front {
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .hero-wordmark:hover .hero-card-vector--back {
+    transform: translate(-3px, -2px) rotate(-14deg) scale(1.04);
+  }
+
+  .hero-wordmark:hover .hero-card-vector--front {
+    transform: translate(2px, -1px) rotate(6deg) scale(1.04);
+  }
+
+  .home-badges > div {
+    border-width: 1px;
+    border-color: rgba(23, 23, 23, 0.12);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    backdrop-filter: blur(4px);
+    transition: transform 0.2s ease, border-color 0.2s ease;
+  }
+
+  .home-badges > div:hover {
+    transform: translateY(-1px);
+    border-color: var(--color-ink);
+  }
+
+  :root[data-theme="dark"] .home-badges > div {
+    border-color: rgba(244, 239, 228, 0.12);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  }
+}
