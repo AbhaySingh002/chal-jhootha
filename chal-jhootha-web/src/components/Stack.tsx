@@ -25,7 +25,7 @@ const MinimalRankCard: React.FC<MinimalRankCardProps> = ({ rank }) => {
         borderColor: 'var(--stack-card-border)',
       }}
     >
-      {/* Inner docket card body with Devanagari engraved watermark, corner pips & geometric centerpiece */}
+      {/* Inner docket card body with English engraved watermark, corner pips & geometric centerpiece */}
       <div
         className="card-watermark-bg relative flex h-full w-full flex-col justify-between overflow-hidden rounded-lg sm:rounded-xl p-1.5 sm:p-2"
         style={{

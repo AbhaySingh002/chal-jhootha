@@ -25,9 +25,11 @@ export interface GameStateEvent extends BaseServerEvent {
   stackCount: number;
   claimedRank: string | null;
   currentTurnPlayerId: string | null;
+  roundOpenerId: string | null;
+  turnDeadlineUnixMs?: number | null;
+  turnDurationMs?: number;
   lastAction: GameState['lastAction'];
   topPlay?: TopPlay | null;
-  roundOpenerId: string | null;
   winners?: string[];
   deckCount?: number;
   winnerCount?: number;
@@ -100,11 +102,6 @@ export interface PlayerReconnectedEvent extends BaseServerEvent {
   playerId: string;
 }
 
-export interface PlayerAbandonedEvent extends BaseServerEvent {
-  type: 'player_abandoned';
-  playerId: string;
-}
-
 export interface RoomLeftEvent extends BaseServerEvent {
   type: 'room_left';
   roomCode: string;
@@ -136,6 +133,16 @@ export interface ReactionEvent {
   emoji: string;
 }
 
+export interface RoomInviteServerEvent {
+  type: 'room_invite';
+  token: string;
+  roomCode: string;
+  hostId: string;
+  hostName: string;
+  recipientId: string;
+  expiresAt: string;
+}
+
 export type ServerEvent =
   | RoomStateEvent
   | GameStateEvent
@@ -148,9 +155,9 @@ export type ServerEvent =
   | ErrorEvent
   | PlayerDisconnectedEvent
   | PlayerReconnectedEvent
-  | PlayerAbandonedEvent
   | RoomLeftEvent
   | RoomDestroyedEvent
   | DeviceSupersededEvent
   | VoiceSignalEvent
-  | ReactionEvent;
+  | ReactionEvent
+  | RoomInviteServerEvent;

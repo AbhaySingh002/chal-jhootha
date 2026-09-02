@@ -30,9 +30,21 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = 'play' }) => {
     };
     refresh();
     const timer = window.setInterval(refresh, 30_000);
+
+    const onInvite = (e: Event) => {
+      const invite = (e as CustomEvent<RoomInvite>).detail;
+      setInvites((prev) => {
+        if (prev.some((item) => item.token === invite.token)) return prev;
+        return [invite, ...prev];
+      });
+      setShowInvites(true);
+    };
+    window.addEventListener('cj:room_invite', onInvite);
+
     return () => {
       active = false;
       window.clearInterval(timer);
+      window.removeEventListener('cj:room_invite', onInvite);
     };
   }, [isRegistered]);
 

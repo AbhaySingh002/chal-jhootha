@@ -51,7 +51,6 @@ func setHands(r *Room, hands map[string][]ws.Card, turn string) {
 	for i := range r.State.Players {
 		r.State.Players[i].HandCount = len(hands[r.State.Players[i].ID])
 		r.State.Players[i].IsWinner = false
-		r.State.Players[i].IsAbandoned = false
 		r.State.Players[i].Role = ws.RoleActive
 	}
 	r.setCurrentTurn(turn)
@@ -187,6 +186,52 @@ func TestStateMachineBurnAfterFullSkipCircle(t *testing.T) {
 	assert.Equal(t, "b", *r.State.CurrentTurnPlayerID)
 }
 
+func TestStateMachineSelfChallengeRejected(t *testing.T) {
+	r, clients := newMachineRoom(t, 4, 1)
+	setHands(r, map[string][]ws.Card{
+		"a": {card("a1", "A"), card("a2", "2")},
+		"b": {card("b1", "3")},
+		"c": {card("c1", "4")},
+		"d": {card("d1", "5")},
+	}, "a")
+	machinePlay(t, r, clients[0], []ws.Card{card("a1", "A")}, []ws.ClaimGroup{{Rank: "A", Count: 1}})
+	machineSkip(t, r, clients[1])
+	machineSkip(t, r, clients[2])
+	machineSkip(t, r, clients[3])
+	assert.Equal(t, 1, r.State.StackCount)
+	assert.Equal(t, "a", *r.State.CurrentTurnPlayerID)
+
+	for {
+		select {
+		case <-clients[0].out:
+		default:
+			goto drained
+		}
+	}
+drained:
+	seqBefore := r.seq
+	machineChallenge(t, r, clients[0])
+	assert.Equal(t, seqBefore, r.seq)
+	assert.Equal(t, 1, r.State.StackCount)
+	assert.NotNil(t, r.State.TopPlay)
+	assert.Equal(t, "a", r.State.TopPlay.PlayerID)
+	assert.Equal(t, "a", *r.State.CurrentTurnPlayerID)
+
+	var er ws.ErrorEvent
+	select {
+	case raw := <-clients[0].out:
+		require.NoError(t, json.Unmarshal(raw, &er))
+		assert.Equal(t, "CANNOT_CHALLENGE_SELF", er.Code)
+	default:
+		t.Fatal("expected error event on clients[0].out")
+	}
+
+	machineSkip(t, r, clients[0])
+	assert.Zero(t, r.State.StackCount)
+	assert.Nil(t, r.State.TopPlay)
+	assert.Equal(t, "b", *r.State.CurrentTurnPlayerID)
+}
+
 func TestStateMachineAddClearsEarlierSkipsBeforeBurn(t *testing.T) {
 	r, clients := newMachineRoom(t, 4, 1)
 	setHands(r, map[string][]ws.Card{
@@ -275,7 +320,7 @@ func TestStateMachineTruthAndBluffFinalChallenge(t *testing.T) {
 	assert.Greater(t, r.State.Players[r.playerIndex("a")].HandCount, 0)
 }
 
-func TestStateMachineAbandonedPlayerExcludedFromBurn(t *testing.T) {
+func TestStateMachineLeavingPlayerExcludedFromBurn(t *testing.T) {
 	r, clients := newMachineRoom(t, 3, 1)
 	setHands(r, map[string][]ws.Card{
 		"a": {card("a1", "A"), card("a2", "2")},
@@ -283,7 +328,7 @@ func TestStateMachineAbandonedPlayerExcludedFromBurn(t *testing.T) {
 		"c": {card("c1", "4")},
 	}, "a")
 	machinePlay(t, r, clients[0], []ws.Card{card("a1", "A")}, []ws.ClaimGroup{{Rank: "A", Count: 1}})
-	r.retirePlayer("c")
+	r.processMessage(RoomMessage{ConnectionID: clients[2].conn, PlayerID: clients[2].id, Event: &ws.LeaveRoomEvent{BaseClientEvent: ws.BaseClientEvent{Type: "leave_room", ClientMsgID: "leave-c"}}})
 	machineSkip(t, r, clients[1])
 	machineSkip(t, r, clients[0])
 	assert.Zero(t, r.State.StackCount)

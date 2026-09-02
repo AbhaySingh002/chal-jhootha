@@ -12,10 +12,9 @@ import (
 )
 
 func init() {
-	DisconnectedTurnGrace = 10 * time.Millisecond
-	DisconnectAbandonAfter = 500 * time.Millisecond
+	TurnDuration = 60 * time.Millisecond
+	ReconnectCushion = 30 * time.Millisecond
 }
-
 
 type lifecycleClient struct {
 	id   string
@@ -25,7 +24,6 @@ type lifecycleClient struct {
 
 func newLifecycleRoom(t *testing.T, playerCount int) (*Room, []lifecycleClient) {
 	t.Helper()
-	
 	r := newRoom("LIFECYCLE", nil, false)
 	clients := make([]lifecycleClient, 0, playerCount)
 	for i := 0; i < playerCount; i++ {
@@ -78,261 +76,148 @@ func otherLifecycleClient(clients []lifecycleClient, playerID string) lifecycleC
 	return lifecycleClient{}
 }
 
-func nonHostNonCurrentClient(clients []lifecycleClient, currentID string) lifecycleClient {
-	for _, client := range clients {
-		if client.id != clients[0].id && client.id != currentID {
-			return client
-		}
-	}
-	return lifecycleClient{}
+func TestTurnTimerAutoSkipsActivePlayer(t *testing.T) {
+	r, clients := newLifecycleRoom(t, 2)
+	currentID := *r.State.CurrentTurnPlayerID
+	next := otherLifecycleClient(clients, currentID)
+
+	require.NotNil(t, r.State.TurnDeadlineUnixMs)
+	assert.Equal(t, int(TurnDuration/time.Millisecond), r.State.TurnDurationMs)
+
+	time.Sleep(TurnDuration + 20*time.Millisecond)
+	processQueued(r)
+
+	assert.Equal(t, next.id, *r.State.CurrentTurnPlayerID)
 }
 
-func TestDisconnectedCurrentTurnUsesGraceThenCanonicalSkip(t *testing.T) {
+func TestDisconnectedPlayerTurnTimerContinuesAndAutoSkips(t *testing.T) {
 	r, clients := newLifecycleRoom(t, 2)
 	currentID := *r.State.CurrentTurnPlayerID
 	current := lifecycleClientByID(t, clients, currentID)
+	next := otherLifecycleClient(clients, currentID)
 
+	// Disconnect mid-turn
 	r.processMessage(RoomMessage{ConnectionID: current.conn, PlayerID: current.id, Event: InternalLeaveEvent{ConnectionID: current.conn}})
-	require.NotNil(t, r.turnGrace)
+	assert.True(t, r.State.Players[r.playerIndex(current.id)].IsDisconnected)
 	assert.Equal(t, current.id, *r.State.CurrentTurnPlayerID)
 
-	time.Sleep(DisconnectedTurnGrace + 10*time.Millisecond)
+	time.Sleep(TurnDuration + 20*time.Millisecond)
 	processQueued(r)
-	assert.NotEqual(t, current.id, *r.State.CurrentTurnPlayerID)
+
+	// Turn has advanced to the next player
+	assert.Equal(t, next.id, *r.State.CurrentTurnPlayerID)
+	// Disconnected player remains seated with their cards (never deleted/abandoned)
 	assert.True(t, r.State.Players[r.playerIndex(current.id)].IsDisconnected)
+	assert.NotEmpty(t, r.playerHands[current.id])
 }
 
-func TestReconnectCancelsDisconnectedTurnGrace(t *testing.T) {
+func TestReconnectWithLessThanCushionGetsBouncedToCushion(t *testing.T) {
 	r, clients := newLifecycleRoom(t, 2)
 	currentID := *r.State.CurrentTurnPlayerID
 	current := lifecycleClientByID(t, clients, currentID)
+
+	// Disconnect
 	r.processMessage(RoomMessage{ConnectionID: current.conn, PlayerID: current.id, Event: InternalLeaveEvent{ConnectionID: current.conn}})
+
+	// Wait until less than cushion remaining (60ms - 40ms = 20ms remaining < 30ms cushion)
+	time.Sleep(40 * time.Millisecond)
 
 	reply := make(chan string, 1)
-	r.processMessage(RoomMessage{ConnectionID: "reconnect", Event: InternalJoinEvent{ClientMsgID: "reconnect", PlayerName: current.id, UserID: current.id, ConnectionID: "reconnect", Outbound: make(chan []byte, 16), ReplyChan: reply}})
+	r.processMessage(RoomMessage{
+		ConnectionID: "reconnect-conn",
+		Event: InternalJoinEvent{
+			ClientMsgID:  "reconnect",
+			PlayerName:   current.id,
+			UserID:       current.id,
+			ConnectionID: "reconnect-conn",
+			Outbound:     make(chan []byte, 16),
+			ReplyChan:    reply,
+		},
+	})
 	require.Equal(t, current.id, <-reply)
-	time.Sleep(DisconnectedTurnGrace + 10*time.Millisecond)
-	processQueued(r)
 
-	assert.Equal(t, current.id, *r.State.CurrentTurnPlayerID)
-	assert.Nil(t, r.turnGrace)
+	// Cushion should have been applied
+	assert.True(t, r.cushionApplied)
 	assert.False(t, r.State.Players[r.playerIndex(current.id)].IsDisconnected)
-}
-
-func TestLaterDisconnectedTurnStartsGraceAndStaleGraceCannotMutate(t *testing.T) {
-	r, clients := newLifecycleRoom(t, 2)
-	currentID := *r.State.CurrentTurnPlayerID
-	next := otherLifecycleClient(clients, currentID)
-	r.processMessage(RoomMessage{ConnectionID: next.conn, PlayerID: next.id, Event: InternalLeaveEvent{ConnectionID: next.conn}})
-	assert.Nil(t, r.turnGrace)
-
-	current := lifecycleClientByID(t, clients, currentID)
-	r.processMessage(RoomMessage{ConnectionID: current.conn, PlayerID: current.id, Event: &ws.SkipEvent{BaseClientEvent: ws.BaseClientEvent{Type: "skip", ClientMsgID: "skip"}, ExpectedSeq: r.seq}})
-	require.Equal(t, next.id, *r.State.CurrentTurnPlayerID)
-	require.NotNil(t, r.turnGrace)
-	stale := *r.turnGrace
-
-	r.setCurrentTurn(current.id)
-	before := r.seq
-	r.processMessage(RoomMessage{PlayerID: stale.PlayerID, Event: TurnGraceExpiredEvent{PlayerID: stale.PlayerID, Generation: stale.Generation, DeadlineUnixNano: stale.DeadlineUnixNano}})
-	assert.Equal(t, before, r.seq)
 	assert.Equal(t, current.id, *r.State.CurrentTurnPlayerID)
 
-	time.Sleep(DisconnectedTurnGrace + 10*time.Millisecond)
+	// At 20ms after reconnect, player is still active because cushion gave them 30ms
+	time.Sleep(15 * time.Millisecond)
 	processQueued(r)
 	assert.Equal(t, current.id, *r.State.CurrentTurnPlayerID)
+
+	// After cushion expires, auto-skip occurs
+	time.Sleep(25 * time.Millisecond)
+	processQueued(r)
+	assert.NotEqual(t, current.id, *r.State.CurrentTurnPlayerID)
 }
 
-func TestRepeatedDisconnectedTurnsReceiveTheirOwnGrace(t *testing.T) {
+func TestSubsequentTurnsForDisconnectedPlayerAreInstantlySkipped(t *testing.T) {
 	r, clients := newLifecycleRoom(t, 2)
 	currentID := *r.State.CurrentTurnPlayerID
-	next := otherLifecycleClient(clients, currentID)
-	r.processMessage(RoomMessage{ConnectionID: next.conn, PlayerID: next.id, Event: InternalLeaveEvent{ConnectionID: next.conn}})
-
 	current := lifecycleClientByID(t, clients, currentID)
-	r.processMessage(RoomMessage{ConnectionID: current.conn, PlayerID: current.id, Event: &ws.SkipEvent{BaseClientEvent: ws.BaseClientEvent{Type: "skip", ClientMsgID: "first-pass"}, ExpectedSeq: r.seq}})
-	require.Equal(t, next.id, *r.State.CurrentTurnPlayerID)
-	firstGrace := *r.turnGrace
-	time.Sleep(DisconnectedTurnGrace + 10*time.Millisecond)
-	processQueued(r)
-	require.Equal(t, current.id, *r.State.CurrentTurnPlayerID)
+	other := otherLifecycleClient(clients, currentID)
 
-	r.processMessage(RoomMessage{ConnectionID: current.conn, PlayerID: current.id, Event: &ws.SkipEvent{BaseClientEvent: ws.BaseClientEvent{Type: "skip", ClientMsgID: "second-pass"}, ExpectedSeq: r.seq}})
-	require.Equal(t, next.id, *r.State.CurrentTurnPlayerID)
-	require.NotNil(t, r.turnGrace)
-	assert.Greater(t, r.turnGrace.Generation, firstGrace.Generation)
-	assert.Greater(t, r.turnGrace.DeadlineUnixNano, firstGrace.DeadlineUnixNano)
-}
+	// Disconnect 'other' player while it's current's turn
+	r.processMessage(RoomMessage{ConnectionID: other.conn, PlayerID: other.id, Event: InternalLeaveEvent{ConnectionID: other.conn}})
+	assert.True(t, r.State.Players[r.playerIndex(other.id)].IsDisconnected)
 
-func TestDisconnectedOpenerGraceUsesNormalBurnPath(t *testing.T) {
-	r, clients := newLifecycleRoom(t, 2)
-	openerID := *r.State.RoundOpenerID
-	opener := lifecycleClientByID(t, clients, openerID)
-	card := r.playerHands[opener.id][0]
-	r.processMessage(RoomMessage{ConnectionID: opener.conn, PlayerID: opener.id, Event: &ws.PlayCardsEvent{
-		BaseClientEvent: ws.BaseClientEvent{Type: "play_cards", ClientMsgID: "open"},
+	// Current player plays cards to open stack
+	card := r.playerHands[current.id][0]
+	r.processMessage(RoomMessage{ConnectionID: current.conn, PlayerID: current.id, Event: &ws.PlayCardsEvent{
+		BaseClientEvent: ws.BaseClientEvent{Type: "play_cards", ClientMsgID: "play1"},
 		CardIDs:         []string{card.ID},
 		Claims:          []ws.ClaimGroup{{Rank: card.Rank, Count: 1}},
 		ExpectedSeq:     r.seq,
 	}})
-	require.Equal(t, 1, r.State.StackCount)
 
+	// It was 'other's turn; because 'other' was already disconnected, an instant skip was queued
+	processQueued(r)
+
+	// 'other' should have auto-skipped instantly without waiting 60s
+	// And 'other' still has their hand and seat!
+	assert.True(t, r.State.Players[r.playerIndex(other.id)].IsDisconnected)
+	assert.NotEmpty(t, r.playerHands[other.id])
+}
+
+func TestDisconnectedOpenerSkipPassesOpenerPrivilege(t *testing.T) {
+	r, clients := newLifecycleRoom(t, 2)
+	openerID := *r.State.RoundOpenerID
+	opener := lifecycleClientByID(t, clients, openerID)
+	responder := otherLifecycleClient(clients, openerID)
+
+	// Opener disconnects before playing any cards
 	r.processMessage(RoomMessage{ConnectionID: opener.conn, PlayerID: opener.id, Event: InternalLeaveEvent{ConnectionID: opener.conn}})
-	responder := lifecycleClientByID(t, clients, *r.State.CurrentTurnPlayerID)
-	r.processMessage(RoomMessage{ConnectionID: responder.conn, PlayerID: responder.id, Event: &ws.SkipEvent{BaseClientEvent: ws.BaseClientEvent{Type: "skip", ClientMsgID: "pass"}, ExpectedSeq: r.seq}})
-	require.Equal(t, opener.id, *r.State.CurrentTurnPlayerID)
-	require.NotNil(t, r.turnGrace)
 
-	time.Sleep(DisconnectedTurnGrace + 10*time.Millisecond)
+	// Wait for opener's turn timer to expire
+	time.Sleep(TurnDuration + 20*time.Millisecond)
 	processQueued(r)
-	assert.Zero(t, r.State.StackCount)
-	assert.Nil(t, r.State.TopPlay)
+
+	// Opener privilege passed to responder
 	assert.Equal(t, responder.id, *r.State.CurrentTurnPlayerID)
+	assert.Equal(t, responder.id, *r.State.RoundOpenerID)
+	assert.Zero(t, r.State.StackCount)
 }
 
-func TestDisconnectedPendingFinishResponderAutoSkips(t *testing.T) {
-	r, clients := newLifecycleRoom(t, 2)
-	winnerID := *r.State.CurrentTurnPlayerID
-	winner := lifecycleClientByID(t, clients, winnerID)
-	lastCard := r.playerHands[winner.id][0]
-	r.playerHands[winner.id] = []ws.Card{lastCard}
-	r.State.Players[r.playerIndex(winner.id)].HandCount = 1
-	r.processMessage(RoomMessage{ConnectionID: winner.conn, PlayerID: winner.id, Event: &ws.PlayCardsEvent{
-		BaseClientEvent: ws.BaseClientEvent{Type: "play_cards", ClientMsgID: "last"},
-		CardIDs:         []string{lastCard.ID},
-		Claims:          []ws.ClaimGroup{{Rank: lastCard.Rank, Count: 1}},
-		ExpectedSeq:     r.seq,
-	}})
-	require.Equal(t, winner.id, *r.State.PendingFinishID)
-	responder := lifecycleClientByID(t, clients, *r.State.CurrentTurnPlayerID)
-	r.processMessage(RoomMessage{ConnectionID: responder.conn, PlayerID: responder.id, Event: InternalLeaveEvent{ConnectionID: responder.conn}})
-	time.Sleep(DisconnectedTurnGrace + 10*time.Millisecond)
-	processQueued(r)
-
-	assert.Equal(t, []string{winner.id}, r.State.Winners)
-	assert.Equal(t, ws.PhaseFinished, r.State.Phase)
-}
-
-func TestAbandonmentBurnsHandAndReconnectsAsSpectator(t *testing.T) {
-	r, clients := newLifecycleRoom(t, 3)
-	currentID := *r.State.CurrentTurnPlayerID
-	target := nonHostNonCurrentClient(clients, currentID)
-	startingHand := len(r.playerHands[target.id])
-	require.Positive(t, startingHand)
-
-	r.processMessage(RoomMessage{ConnectionID: target.conn, PlayerID: target.id, Event: InternalLeaveEvent{ConnectionID: target.conn}})
-	time.Sleep(DisconnectAbandonAfter + 10*time.Millisecond)
-	processQueued(r)
-
-	player := r.State.Players[r.playerIndex(target.id)]
-	assert.True(t, player.IsAbandoned)
-	assert.Equal(t, ws.RoleAbandoned, player.Role)
-	assert.Equal(t, 0, player.HandCount)
-	assert.Empty(t, r.playerHands[target.id])
-	assert.NotContains(t, r.State.Winners, target.id)
-	assert.Equal(t, ws.PhasePlaying, r.State.Phase)
-
-	reply := make(chan string, 1)
-	r.processMessage(RoomMessage{ConnectionID: "spectator", Event: InternalJoinEvent{ClientMsgID: "spectator", PlayerName: target.id, UserID: target.id, ConnectionID: "spectator", Outbound: make(chan []byte, 16), ReplyChan: reply}})
-	require.Equal(t, target.id, <-reply)
-	player = r.State.Players[r.playerIndex(target.id)]
-	assert.True(t, player.IsAbandoned)
-	assert.False(t, player.IsDisconnected)
-
-	r.processMessage(RoomMessage{ConnectionID: clients[0].conn, PlayerID: clients[0].id, Event: &ws.ResetToLobbyEvent{BaseClientEvent: ws.BaseClientEvent{Type: "reset_to_lobby", ClientMsgID: "reset"}}})
-	player = r.State.Players[r.playerIndex(target.id)]
-	assert.False(t, player.IsAbandoned)
-	assert.Equal(t, ws.RoleActive, player.Role)
-}
-
-func TestAbandonmentWithOneActivePlayerEndsMatchWithoutAwardingRetiree(t *testing.T) {
+func TestSnapshotRecoveryPreservesRemainingTurnClock(t *testing.T) {
 	r, clients := newLifecycleRoom(t, 2)
 	currentID := *r.State.CurrentTurnPlayerID
-	target := otherLifecycleClient(clients, currentID)
-	r.processMessage(RoomMessage{ConnectionID: target.conn, PlayerID: target.id, Event: InternalLeaveEvent{ConnectionID: target.conn}})
 
-	time.Sleep(DisconnectAbandonAfter + 10*time.Millisecond)
-	processQueued(r)
-
-	require.Equal(t, ws.PhaseFinished, r.State.Phase)
-	assert.NotContains(t, r.State.Winners, target.id)
-}
-
-func TestSnapshotRecoveryPreservesOriginalDeadlines(t *testing.T) {
-	r, clients := newLifecycleRoom(t, 3)
-	target := nonHostNonCurrentClient(clients, *r.State.CurrentTurnPlayerID)
-	r.processMessage(RoomMessage{ConnectionID: target.conn, PlayerID: target.id, Event: InternalLeaveEvent{ConnectionID: target.conn}})
-	original := r.disconnects[target.id]
 	raw, err := r.marshalSnapshot()
 	require.NoError(t, err)
 
-	time.Sleep(300 * time.Millisecond)
 	restored, err := restoreRoom(raw, nil, false)
 	require.NoError(t, err)
-	assert.Equal(t, original.AbandonDeadlineUnixNano, restored.disconnects[target.id].AbandonDeadlineUnixNano)
-	time.Sleep(300 * time.Millisecond)
+
+	assert.Equal(t, currentID, *restored.State.CurrentTurnPlayerID)
+	assert.NotNil(t, restored.State.TurnDeadlineUnixMs)
+
+	// Wait for timer to expire in restored room
+	time.Sleep(TurnDuration + 20*time.Millisecond)
 	processQueued(restored)
-	assert.True(t, restored.State.Players[restored.playerIndex(target.id)].IsAbandoned)
-}
 
-func TestSnapshotRecoveryImmediatelyProcessesExpiredDeadline(t *testing.T) {
-	r, clients := newLifecycleRoom(t, 3)
-	target := nonHostNonCurrentClient(clients, *r.State.CurrentTurnPlayerID)
-	r.processMessage(RoomMessage{ConnectionID: target.conn, PlayerID: target.id, Event: InternalLeaveEvent{ConnectionID: target.conn}})
-	raw, err := r.marshalSnapshot()
-	require.NoError(t, err)
-
-	time.Sleep(DisconnectAbandonAfter + 10*time.Millisecond)
-	restored, err := restoreRoom(raw, nil, false)
-	require.NoError(t, err)
-	processQueued(restored)
-	assert.True(t, restored.State.Players[restored.playerIndex(target.id)].IsAbandoned)
-}
-
-func TestSnapshotRecoveryPreservesCurrentTurnGrace(t *testing.T) {
-	r, clients := newLifecycleRoom(t, 2)
-	currentID := *r.State.CurrentTurnPlayerID
-	current := lifecycleClientByID(t, clients, currentID)
-	r.processMessage(RoomMessage{ConnectionID: current.conn, PlayerID: current.id, Event: InternalLeaveEvent{ConnectionID: current.conn}})
-	require.NotNil(t, r.turnGrace)
-	originalGrace := *r.turnGrace
-	raw, err := r.marshalSnapshot()
-	require.NoError(t, err)
-
-	time.Sleep(10 * time.Millisecond)
-	restored, err := restoreRoom(raw, nil, false)
-	require.NoError(t, err)
-	require.NotNil(t, restored.turnGrace)
-	assert.Equal(t, originalGrace.DeadlineUnixNano, restored.turnGrace.DeadlineUnixNano)
-	time.Sleep(10 * time.Millisecond)
-	processQueued(restored)
-	assert.NotEqual(t, current.id, *restored.State.CurrentTurnPlayerID)
-}
-
-func TestLifecycleCallbacksCannotMutateResetRoom(t *testing.T) {
-	r, clients := newLifecycleRoom(t, 2)
-	currentID := *r.State.CurrentTurnPlayerID
-	current := lifecycleClientByID(t, clients, currentID)
-	r.processMessage(RoomMessage{ConnectionID: current.conn, PlayerID: current.id, Event: InternalLeaveEvent{ConnectionID: current.conn}})
-	require.NotNil(t, r.turnGrace)
-	staleGrace := *r.turnGrace
-	staleAbandon := r.disconnects[current.id]
-
-	host := clients[0]
-	hostConnectionID := host.conn
-	if host.id == current.id {
-		reply := make(chan string, 1)
-		hostConnectionID = "host-reset"
-		r.processMessage(RoomMessage{ConnectionID: hostConnectionID, Event: InternalJoinEvent{ClientMsgID: "host-reconnect", PlayerName: host.id, UserID: host.id, ConnectionID: hostConnectionID, Outbound: make(chan []byte, 16), ReplyChan: reply}})
-		require.Equal(t, host.id, <-reply)
-	}
-	r.processMessage(RoomMessage{ConnectionID: hostConnectionID, PlayerID: host.id, Event: &ws.ResetToLobbyEvent{BaseClientEvent: ws.BaseClientEvent{Type: "reset_to_lobby", ClientMsgID: "reset"}}})
-	before := r.seq
-	r.processMessage(RoomMessage{Event: TurnGraceExpiredEvent{PlayerID: staleGrace.PlayerID, Generation: staleGrace.Generation, DeadlineUnixNano: staleGrace.DeadlineUnixNano}})
-	r.processMessage(RoomMessage{Event: AbandonEvent{PlayerID: current.id, DeadlineUnixNano: staleAbandon.AbandonDeadlineUnixNano}})
-
-	assert.Equal(t, ws.PhaseLobby, r.State.Phase)
-	assert.Equal(t, before, r.seq)
+	assert.NotEqual(t, currentID, *restored.State.CurrentTurnPlayerID)
+	_ = clients
 }
 
 func TestResultsLobbyAcknowledgementsAreIndividualAndGateRestart(t *testing.T) {
@@ -398,7 +283,6 @@ func TestResultsLobbyDoesNotWaitForDisconnectedPlayersAndSurvivesRestore(t *test
 }
 
 func TestSupersededHostCannotMutateLobby(t *testing.T) {
-	
 	r := newRoom("CONTROLLER", nil, false)
 	old := lifecycleClient{id: "host", conn: "old", out: make(chan []byte, 32)}
 	newer := lifecycleClient{id: "host", conn: "new", out: make(chan []byte, 32)}

@@ -101,6 +101,10 @@ export async function connectSocket(url = wsUrl()) {
     socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as ServerEvent;
+        if (data.type === 'room_invite') {
+          window.dispatchEvent(new CustomEvent('cj:room_invite', { detail: data }));
+          return;
+        }
         useGameStore.getState().onMessage(data);
         resolveReliableEvent(data);
       } catch (err) {
@@ -117,9 +121,9 @@ export async function connectSocket(url = wsUrl()) {
         heartbeatInterval = null;
       }
 
-      const rejoinToken = sessionStorage.getItem('rejoinToken');
+      const playerId = sessionStorage.getItem('playerId');
       const roomCode = sessionStorage.getItem('roomCode');
-      if (rejoinToken && roomCode) {
+      if (playerId && roomCode) {
         const delay = Math.min(500 * Math.pow(2, reconnectAttempts), 5000) * (0.5 + Math.random());
         reconnectAttempts++;
         useGameStore.getState().setConnectionStatus('RECONNECTING');
@@ -128,7 +132,6 @@ export async function connectSocket(url = wsUrl()) {
             type: 'join_room',
             roomCode,
             playerName: '',
-            rejoinToken,
             clientMsgId: crypto.randomUUID(),
             protocolVersion: PROTOCOL_VERSION,
           });
@@ -176,9 +179,9 @@ export function disconnectSocket() {
 if (typeof window !== 'undefined') {
   window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && (!socket || socket.readyState !== WebSocket.OPEN)) {
-      const rejoinToken = sessionStorage.getItem('rejoinToken');
+      const playerId = sessionStorage.getItem('playerId');
       const roomCode = sessionStorage.getItem('roomCode');
-      if (rejoinToken && roomCode) void connectSocket();
+      if (playerId && roomCode) void connectSocket();
     }
   });
 }

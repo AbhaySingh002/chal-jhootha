@@ -51,3 +51,6 @@ chal-jhootha-server/chal-jhootha-server
 ehthumbs.db
 Thumbs.db
 .gstack/
+skills-lock.json
+.agents/
+.agents

@@ -7,6 +7,8 @@ import (
 	"embed"
 	"encoding/hex"
 	"errors"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,8 +43,20 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(5)
-	db.SetMaxIdleConns(2)
+	maxOpen := 25
+	if raw := os.Getenv("DB_MAX_OPEN_CONNS"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			maxOpen = n
+		}
+	}
+	maxIdle := 10
+	if raw := os.Getenv("DB_MAX_IDLE_CONNS"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			maxIdle = n
+		}
+	}
+	db.SetMaxOpenConns(maxOpen)
+	db.SetMaxIdleConns(maxIdle)
 	db.SetConnMaxLifetime(5 * time.Minute)
 	db.SetConnMaxIdleTime(2 * time.Minute)
 

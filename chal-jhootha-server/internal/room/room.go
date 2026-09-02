@@ -2,8 +2,6 @@ package room
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"time"
 
@@ -17,16 +15,14 @@ import (
 )
 
 var (
-	DisconnectedTurnGrace  = 10 * time.Second
-	DisconnectAbandonAfter = 5 * time.Minute
+	TurnDuration     = 45 * time.Second
+	ReconnectCushion = 10 * time.Second
 )
 
 const (
-	MaxVoiceParticipants   = 8
-	defaultRoomIdleTTL     = 24 * time.Hour
+	MaxVoiceParticipants = 8
+	defaultRoomIdleTTL   = 24 * time.Hour
 )
-
-
 
 type RoomMessage struct {
 	ConnectionID string
@@ -50,20 +46,9 @@ type connectionState struct {
 	Outbound chan []byte
 }
 
-// disconnectLifecycle is private room state. It carries the original
-// disconnect time across a server restart so an outage never grants a player
-// a fresh abandonment window.
-type disconnectLifecycle struct {
-	DisconnectedAtUnixNano  int64 `json:"disconnectedAtUnixNano"`
-	AbandonDeadlineUnixNano int64 `json:"abandonDeadlineUnixNano"`
-}
-
-// turnGrace is private actor state for a disconnected player's current turn.
-// Generation makes delayed callbacks harmless once a turn has moved on.
-type turnGrace struct {
-	PlayerID         string `json:"playerId"`
-	Generation       uint64 `json:"generation"`
-	DeadlineUnixNano int64  `json:"deadlineUnixNano"`
+type TurnTimerExpiredEvent struct {
+	PlayerID   string
+	Generation uint64
 }
 
 type Room struct {
@@ -74,7 +59,6 @@ type Room struct {
 
 	playerHands              map[string][]ws.Card
 	stack                    []ws.Card
-	rejoinTokens             map[string]string
 	connections              map[string]connectionState // connID ->
 	controllerConn           map[string]string          // playerID -> connID
 	seq                      int
@@ -83,11 +67,10 @@ type Room struct {
 	lastActivity             time.Time
 	idleTTL                  time.Duration
 	tracker                  *IdempotencyTracker
-	disconnects              map[string]disconnectLifecycle
 	turnGeneration           uint64
-	turnGrace                *turnGrace
-	turnGraceTimer           *time.Timer
-	abandonTimers            map[string]*time.Timer
+	turnTimer                *time.Timer
+	turnDeadline             time.Time
+	cushionApplied           bool
 	resultsLobby             map[string]bool
 	consecutiveSkipPlayerIDs []string
 	voiceMembers             map[string]bool
@@ -125,15 +108,12 @@ func newRoom(code string, persistFn func(*Room), start bool) *Room {
 		CloseReq:                 make(chan struct{}),
 		playerHands:              make(map[string][]ws.Card),
 		stack:                    make([]ws.Card, 0),
-		rejoinTokens:             make(map[string]string),
 		connections:              make(map[string]connectionState),
 		controllerConn:           make(map[string]string),
 		seq:                      1,
 		lastActivity:             time.Now(),
 		idleTTL:                  defaultRoomIdleTTL,
 		tracker:                  NewIdempotencyTracker(256),
-		disconnects:              make(map[string]disconnectLifecycle),
-		abandonTimers:            make(map[string]*time.Timer),
 		resultsLobby:             make(map[string]bool),
 		consecutiveSkipPlayerIDs: []string{},
 		voiceMembers:             make(map[string]bool),
@@ -346,10 +326,8 @@ func (r *Room) processMessage(msg RoomMessage) {
 	case InternalLeaveEvent:
 		r.handleInternalLeave(msg.PlayerID, ev)
 		logger.EventProcessed(r.Code, msg.PlayerID, "internal_leave", r.seq, time.Since(start))
-	case TurnGraceExpiredEvent:
-		r.handleTurnGraceExpired(ev)
-	case AbandonEvent:
-		r.handleAbandon(ev)
+	case TurnTimerExpiredEvent:
+		r.handleTurnTimerExpired(ev)
 	case snapshotRequest:
 		raw, err := r.marshalSnapshot()
 		select {
@@ -372,9 +350,6 @@ func (r *Room) playerRole(playerID string) ws.PlayerRole {
 			}
 			if p.IsWinner {
 				return ws.RoleWinnerSpectator
-			}
-			if p.IsAbandoned {
-				return ws.RoleAbandoned
 			}
 			return ws.RoleActive
 		}
@@ -500,6 +475,8 @@ func (r *Room) gameStateEventFor(playerID, connID string) ws.GameStateEvent {
 		ClaimedRank:           r.State.ClaimedRank,
 		CurrentTurnPlayerID:   r.State.CurrentTurnPlayerID,
 		RoundOpenerID:         r.State.RoundOpenerID,
+		TurnDeadlineUnixMs:    r.State.TurnDeadlineUnixMs,
+		TurnDurationMs:        r.State.TurnDurationMs,
 		LastAction:            r.State.LastAction,
 		TopPlay:               r.State.TopPlay,
 		Winners:               r.State.Winners,
@@ -566,10 +543,6 @@ func (r *Room) canAct(playerID, connID string) bool {
 				r.reject(playerID, connID, "UNAUTHORIZED", "Finished players cannot act")
 				return false
 			}
-			if p.IsAbandoned {
-				r.reject(playerID, connID, "UNAUTHORIZED", "Abandoned players cannot act")
-				return false
-			}
 			return true
 		}
 	}
@@ -588,10 +561,6 @@ func (r *Room) requireHostController(playerID, connID string) bool {
 		return false
 	}
 	player := r.State.Players[index]
-	if player.IsAbandoned {
-		r.reject(playerID, connID, "UNAUTHORIZED", "Abandoned players cannot act")
-		return false
-	}
 	if player.IsWinner && r.State.Phase != ws.PhaseFinished {
 		r.reject(playerID, connID, "UNAUTHORIZED", "Finished players cannot act")
 		return false
@@ -621,7 +590,7 @@ func (r *Room) canReturnToLobby(playerID, connID string) bool {
 
 func (r *Room) resultsLobbyReady() bool {
 	for _, player := range r.State.Players {
-		if player.IsDisconnected || player.IsAbandoned {
+		if player.IsDisconnected {
 			continue
 		}
 		if !r.resultsLobby[player.ID] {
@@ -644,98 +613,69 @@ func (r *Room) playerIndex(playerID string) int {
 	return -1
 }
 
-func (r *Room) stopTurnGrace() {
-	if r.turnGraceTimer != nil {
-		r.turnGraceTimer.Stop()
-		r.turnGraceTimer = nil
-	}
-	r.turnGrace = nil
-}
-
-func (r *Room) stopAbandonTimer(playerID string) {
-	if timer, ok := r.abandonTimers[playerID]; ok {
-		timer.Stop()
-		delete(r.abandonTimers, playerID)
+func (r *Room) stopTurnTimer() {
+	if r.turnTimer != nil {
+		r.turnTimer.Stop()
+		r.turnTimer = nil
 	}
 }
 
 func (r *Room) stopLifecycleTimers() {
-	r.stopTurnGrace()
-	for playerID := range r.abandonTimers {
-		r.stopAbandonTimer(playerID)
-	}
+	r.stopTurnTimer()
 }
 
-func (r *Room) startAbandonTimer(playerID string, deadlineUnixNano int64) {
-	r.stopAbandonTimer(playerID)
-	delay := time.Unix(0, deadlineUnixNano).Sub(r.now())
-	event := AbandonEvent{PlayerID: playerID, DeadlineUnixNano: deadlineUnixNano}
-	if delay <= 0 {
-		select {
-		case r.Inbox <- RoomMessage{PlayerID: playerID, Event: event}:
-		default:
+func (r *Room) anyPlayerConnected() bool {
+	for _, p := range r.State.Players {
+		if !p.IsDisconnected {
+			return true
 		}
-		return
 	}
-	r.abandonTimers[playerID] = time.AfterFunc(delay, func() {
-		select {
-		case r.Inbox <- RoomMessage{PlayerID: playerID, Event: event}:
-		case <-r.ctx.Done():
-		}
-	})
+	return false
 }
 
-func (r *Room) startTurnGraceForCurrentTurn() {
-	r.stopTurnGrace()
-	if r.State.Phase != ws.PhasePlaying || r.State.CurrentTurnPlayerID == nil {
-		return
-	}
-	playerID := *r.State.CurrentTurnPlayerID
-	index := r.playerIndex(playerID)
-	if index == -1 || !r.State.Players[index].IsDisconnected || r.State.Players[index].IsAbandoned {
-		return
-	}
-	grace := &turnGrace{
-		PlayerID:         playerID,
-		Generation:       r.turnGeneration,
-		DeadlineUnixNano: r.now().Add(DisconnectedTurnGrace).UnixNano(),
-	}
-	r.turnGrace = grace
-	r.scheduleTurnGrace(grace)
-}
-
-func (r *Room) scheduleTurnGrace(grace *turnGrace) {
-	if grace == nil {
-		return
-	}
-	delay := time.Unix(0, grace.DeadlineUnixNano).Sub(r.now())
-	event := TurnGraceExpiredEvent{PlayerID: grace.PlayerID, Generation: grace.Generation, DeadlineUnixNano: grace.DeadlineUnixNano}
-	if delay <= 0 {
-		select {
-		case r.Inbox <- RoomMessage{PlayerID: grace.PlayerID, Event: event}:
-		default:
-		}
-		return
-	}
-	r.turnGraceTimer = time.AfterFunc(delay, func() {
-		select {
-		case r.Inbox <- RoomMessage{PlayerID: grace.PlayerID, Event: event}:
-		case <-r.ctx.Done():
-		}
-	})
-}
-
-// setCurrentTurn is the sole actor path for assigning a turn. It also makes
-// the reconnect grace follow the turn instead of the earlier disconnect.
 func (r *Room) setCurrentTurn(playerID string) {
-	r.stopTurnGrace()
+	r.stopTurnTimer()
 	r.turnGeneration++
 	if playerID == "" {
 		r.State.CurrentTurnPlayerID = nil
+		r.State.TurnDeadlineUnixMs = nil
+		r.State.TurnDurationMs = 0
 		return
 	}
 	r.State.CurrentTurnPlayerID = &playerID
-	r.startTurnGraceForCurrentTurn()
+
+	index := r.playerIndex(playerID)
+	if index != -1 && r.State.Players[index].IsDisconnected {
+		r.State.TurnDeadlineUnixMs = nil
+		r.State.TurnDurationMs = 0
+		if r.anyPlayerConnected() {
+			select {
+			case r.Inbox <- RoomMessage{
+				PlayerID: playerID,
+				Event:    TurnTimerExpiredEvent{PlayerID: playerID, Generation: r.turnGeneration},
+			}:
+			default:
+			}
+		}
+		return
+	}
+
+	r.cushionApplied = false
+	r.turnDeadline = r.now().Add(TurnDuration)
+	ms := r.turnDeadline.UnixMilli()
+	r.State.TurnDeadlineUnixMs = &ms
+	r.State.TurnDurationMs = int(TurnDuration / time.Millisecond)
+
+	gen := r.turnGeneration
+	r.turnTimer = time.AfterFunc(TurnDuration, func() {
+		select {
+		case r.Inbox <- RoomMessage{
+			PlayerID: playerID,
+			Event:    TurnTimerExpiredEvent{PlayerID: playerID, Generation: gen},
+		}:
+		case <-r.ctx.Done():
+		}
+	})
 }
 
 func (r *Room) markDisconnected(playerID string) {
@@ -744,24 +684,6 @@ func (r *Room) markDisconnected(playerID string) {
 		return
 	}
 	r.State.Players[index].IsDisconnected = true
-	if r.State.Players[index].IsAbandoned {
-		return
-	}
-	if r.State.Phase != ws.PhasePlaying || r.State.Players[index].IsWinner {
-		return
-	}
-	if _, alreadyTracked := r.disconnects[playerID]; !alreadyTracked {
-		now := r.now()
-		lifecycle := disconnectLifecycle{
-			DisconnectedAtUnixNano:  now.UnixNano(),
-			AbandonDeadlineUnixNano: now.Add(DisconnectAbandonAfter).UnixNano(),
-		}
-		r.disconnects[playerID] = lifecycle
-		r.startAbandonTimer(playerID, lifecycle.AbandonDeadlineUnixNano)
-	}
-	if r.State.CurrentTurnPlayerID != nil && *r.State.CurrentTurnPlayerID == playerID {
-		r.startTurnGraceForCurrentTurn()
-	}
 }
 
 func (r *Room) markReconnected(playerID string) {
@@ -770,11 +692,41 @@ func (r *Room) markReconnected(playerID string) {
 		return
 	}
 	r.State.Players[index].IsDisconnected = false
-	if r.turnGrace != nil && r.turnGrace.PlayerID == playerID {
-		r.stopTurnGrace()
+	if r.State.CurrentTurnPlayerID != nil {
+		currentTurnID := *r.State.CurrentTurnPlayerID
+		if currentTurnID == playerID {
+			remaining := r.turnDeadline.Sub(r.now())
+			if remaining < ReconnectCushion && !r.cushionApplied {
+				r.cushionApplied = true
+				r.turnDeadline = r.now().Add(ReconnectCushion)
+				ms := r.turnDeadline.UnixMilli()
+				r.State.TurnDeadlineUnixMs = &ms
+				r.stopTurnTimer()
+				gen := r.turnGeneration
+				r.turnTimer = time.AfterFunc(ReconnectCushion, func() {
+					select {
+					case r.Inbox <- RoomMessage{
+						PlayerID: playerID,
+						Event:    TurnTimerExpiredEvent{PlayerID: playerID, Generation: gen},
+					}:
+					case <-r.ctx.Done():
+					}
+				})
+				r.broadcastGameState()
+			}
+		} else {
+			cIndex := r.playerIndex(currentTurnID)
+			if cIndex != -1 && r.State.Players[cIndex].IsDisconnected {
+				select {
+				case r.Inbox <- RoomMessage{
+					PlayerID: currentTurnID,
+					Event:    TurnTimerExpiredEvent{PlayerID: currentTurnID, Generation: r.turnGeneration},
+				}:
+				default:
+				}
+			}
+		}
 	}
-	r.stopAbandonTimer(playerID)
-	delete(r.disconnects, playerID)
 }
 
 func (r *Room) setPendingFinish(playerID string) {
@@ -817,7 +769,7 @@ func (r *Room) skipRequirementsMet() bool {
 			if !rules.IsInRotation(player, r.State.PendingFinishID) {
 				continue
 			}
-		} else if player.IsWinner || player.IsAbandoned {
+		} else if player.IsWinner {
 			continue
 		}
 		required++
@@ -879,7 +831,7 @@ func (r *Room) reconcileSkipProgression() {
 func (r *Room) isActivePlayer(playerID string) bool {
 	for _, player := range r.State.Players {
 		if player.ID == playerID {
-			return !player.IsWinner && !player.IsAbandoned
+			return !player.IsWinner
 		}
 	}
 	return false
@@ -900,23 +852,6 @@ type InternalJoinEvent struct {
 
 type InternalLeaveEvent struct {
 	ConnectionID string
-}
-
-type TurnGraceExpiredEvent struct {
-	PlayerID         string
-	Generation       uint64
-	DeadlineUnixNano int64
-}
-
-type AbandonEvent struct {
-	PlayerID         string
-	DeadlineUnixNano int64
-}
-
-func randomToken() string {
-	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
 }
 
 func (r *Room) attachConn(playerID, connID string, out chan []byte) {
@@ -949,15 +884,10 @@ func (r *Room) handleInternalJoin(ev InternalJoinEvent) {
 			r.markReconnected(playerID)
 			r.attachConn(playerID, ev.ConnectionID, ev.Outbound)
 			r.seq++
-			token := r.rejoinTokens[playerID]
-			if token == "" {
-				token = randomToken()
-				r.rejoinTokens[playerID] = token
-			}
 			logger.Info("RECONNECT", "Player restored", "room", r.Code, "player", playerID, "conn", ev.ConnectionID)
 			r.sendToOutbound(ev.Outbound, ws.AckEvent{
 				Type: "ack", ClientMsgID: ev.ClientMsgID, AppliedSeq: r.seq,
-				PlayerID: &playerID, RoomCode: &r.Code, RejoinToken: &token,
+				PlayerID: &playerID, RoomCode: &r.Code,
 			})
 			r.broadcast(ws.PlayerReconnectedEvent{Type: "player_reconnected", Seq: r.seq, PlayerID: playerID})
 			// A reconnect needs a private snapshot, not a full-state broadcast to
@@ -1001,12 +931,10 @@ func (r *Room) handleInternalJoin(ev InternalJoinEvent) {
 		ID: playerID, Name: name, UserID: &uid, AvatarID: ev.AvatarID, Role: ws.RoleActive,
 	})
 	r.seq++
-	token := randomToken()
-	r.rejoinTokens[playerID] = token
 	logger.Info("JOIN", "Player joined room", "room", r.Code, "player", playerID, "name", name, "totalPlayers", len(r.State.Players))
 	r.sendToOutbound(ev.Outbound, ws.AckEvent{
 		Type: "ack", ClientMsgID: ev.ClientMsgID, AppliedSeq: r.seq,
-		PlayerID: &playerID, RoomCode: &r.Code, RejoinToken: &token,
+		PlayerID: &playerID, RoomCode: &r.Code,
 	})
 	r.broadcastRoomState()
 	r.persist()
@@ -1029,51 +957,12 @@ func removePlayerID(ids []string, playerID string) []string {
 // retirePlayer removes a player from this match's active state while keeping
 // their seat for an abandonment spectator. Explicit leave removes the seat
 // immediately after this bookkeeping has selected a safe successor.
-func (r *Room) retirePlayer(playerID string) {
-	index := r.playerIndex(playerID)
-	if index == -1 {
-		return
-	}
-	r.stopAbandonTimer(playerID)
-	delete(r.disconnects, playerID)
-	if r.turnGrace != nil && r.turnGrace.PlayerID == playerID {
-		r.stopTurnGrace()
-	}
-	r.playerHands[playerID] = nil
-	r.State.Players[index].HandCount = 0
-	r.State.Players[index].IsAbandoned = true
-	r.State.Players[index].Role = ws.RoleAbandoned
-	r.consecutiveSkipPlayerIDs = removePlayerID(r.consecutiveSkipPlayerIDs, playerID)
-	if r.State.PendingFinishID != nil && *r.State.PendingFinishID == playerID {
-		r.clearPendingFinish()
-	}
-
-	if r.State.RoundOpenerID != nil && *r.State.RoundOpenerID == playerID {
-		next := rules.GetNextPlayerID(playerID, r.State.Players, r.State.PendingFinishID)
-		if next == playerID {
-			r.State.RoundOpenerID = nil
-		} else {
-			r.State.RoundOpenerID = &next
-		}
-	}
-}
-
-func (r *Room) resolveRetirement(playerID string) {
-	r.reconcileSkipProgression()
-	r.maybeEndGame()
-	r.persist()
-	r.broadcastGameState()
-}
-
 func (r *Room) clearPlayerRuntime(playerID string) {
-	r.stopAbandonTimer(playerID)
-	delete(r.disconnects, playerID)
 	delete(r.resultsLobby, playerID)
-	if r.turnGrace != nil && r.turnGrace.PlayerID == playerID {
-		r.stopTurnGrace()
+	if r.State.CurrentTurnPlayerID != nil && *r.State.CurrentTurnPlayerID == playerID {
+		r.stopTurnTimer()
 	}
 	delete(r.playerHands, playerID)
-	delete(r.rejoinTokens, playerID)
 	delete(r.voiceMembers, playerID)
 	delete(r.controllerConn, playerID)
 	for id, st := range r.connections {
@@ -1135,11 +1024,9 @@ func (r *Room) handleLeaveRoom(playerID, connID string, ev *ws.LeaveRoomEvent) {
 		return
 	}
 	if r.State.Phase == ws.PhasePlaying {
-		r.retirePlayer(playerID)
 		if r.State.CurrentTurnPlayerID != nil && *r.State.CurrentTurnPlayerID == playerID {
 			r.applySkip(playerID)
 		}
-		r.resolveRetirement(playerID)
 	}
 
 	// The player is intentionally leaving, so remove their seat after any
@@ -1151,6 +1038,10 @@ func (r *Room) handleLeaveRoom(playerID, connID string, ev *ws.LeaveRoomEvent) {
 
 	r.State.Players = append(r.State.Players[:index], r.State.Players[index+1:]...)
 	r.seq++
+	if r.State.Phase == ws.PhasePlaying {
+		r.reconcileSkipProgression()
+		r.maybeEndGame()
+	}
 	// Deliver the acknowledgement while this controller connection is still
 	// registered; it is removed immediately afterwards.
 	r.sendToConn(connID, ws.RoomLeftEvent{Type: "room_left", Seq: r.seq, RoomCode: r.Code})
@@ -1193,45 +1084,16 @@ func (r *Room) handleDestroyRoom(playerID, connID string, ev *ws.DestroyRoomEven
 	}
 }
 
-func (r *Room) handleTurnGraceExpired(ev TurnGraceExpiredEvent) {
-	if r.State.Phase != ws.PhasePlaying || r.turnGrace == nil || r.State.CurrentTurnPlayerID == nil {
+func (r *Room) handleTurnTimerExpired(ev TurnTimerExpiredEvent) {
+	if r.State.Phase != ws.PhasePlaying || r.State.CurrentTurnPlayerID == nil {
 		return
 	}
-	if r.turnGrace.PlayerID != ev.PlayerID || r.turnGrace.Generation != ev.Generation || r.turnGrace.DeadlineUnixNano != ev.DeadlineUnixNano || *r.State.CurrentTurnPlayerID != ev.PlayerID {
-		return
-	}
-	if r.now().UnixNano() < ev.DeadlineUnixNano {
-		return
-	}
-	index := r.playerIndex(ev.PlayerID)
-	if index == -1 || !r.State.Players[index].IsDisconnected || r.State.Players[index].IsAbandoned {
+	if *r.State.CurrentTurnPlayerID != ev.PlayerID || r.turnGeneration != ev.Generation {
 		return
 	}
 	r.applySkip(ev.PlayerID)
 	r.persist()
 	r.broadcastGameState()
-}
-
-func (r *Room) handleAbandon(ev AbandonEvent) {
-	if r.State.Phase != ws.PhasePlaying {
-		return
-	}
-	lifecycle, tracked := r.disconnects[ev.PlayerID]
-	if !tracked || (ev.DeadlineUnixNano != 0 && lifecycle.AbandonDeadlineUnixNano != ev.DeadlineUnixNano) || (ev.DeadlineUnixNano != 0 && r.now().UnixNano() < lifecycle.AbandonDeadlineUnixNano) {
-		return
-	}
-	index := r.playerIndex(ev.PlayerID)
-	if index == -1 || !r.State.Players[index].IsDisconnected || r.State.Players[index].IsAbandoned {
-		return
-	}
-	r.retirePlayer(ev.PlayerID)
-	r.seq++
-	logger.Info("ABANDON", "Player abandoned", "room", r.Code, "player", ev.PlayerID)
-	r.broadcast(ws.PlayerAbandonedEvent{Type: "player_abandoned", Seq: r.seq, PlayerID: ev.PlayerID})
-	if r.State.CurrentTurnPlayerID != nil && *r.State.CurrentTurnPlayerID == ev.PlayerID {
-		r.applySkip(ev.PlayerID)
-	}
-	r.resolveRetirement(ev.PlayerID)
 }
 
 func (r *Room) handleSetConfig(playerID, connID string, ev *ws.SetConfigEvent) {
@@ -1287,7 +1149,6 @@ func (r *Room) handleReturnToLobby(playerID, connID string, ev *ws.ReturnToLobby
 
 func (r *Room) resetForLobby() {
 	r.stopLifecycleTimers()
-	r.disconnects = make(map[string]disconnectLifecycle)
 	r.resultsLobby = make(map[string]bool)
 	r.setCurrentTurn("")
 	r.State.Phase = ws.PhaseLobby
@@ -1309,7 +1170,6 @@ func (r *Room) resetForLobby() {
 	for i := range r.State.Players {
 		r.State.Players[i].HandCount = 0
 		r.State.Players[i].IsWinner = false
-		r.State.Players[i].IsAbandoned = false
 		r.State.Players[i].Role = ws.RoleActive
 	}
 }
@@ -1351,7 +1211,6 @@ func (r *Room) handleStartGame(playerID, connID string, ev *ws.StartGameEvent) {
 	r.seq++
 	r.State.Phase = ws.PhasePlaying
 	r.stopLifecycleTimers()
-	r.disconnects = make(map[string]disconnectLifecycle)
 	r.resultsLobby = make(map[string]bool)
 	now := r.now()
 	r.startedAt = &now
@@ -1366,14 +1225,7 @@ func (r *Room) handleStartGame(playerID, connID string, ev *ws.StartGameEvent) {
 		ids[i] = r.State.Players[i].ID
 		r.State.Players[i].HandCount = 0
 		r.State.Players[i].IsWinner = false
-		r.State.Players[i].IsAbandoned = false
 		r.State.Players[i].Role = ws.RoleActive
-		if r.State.Players[i].IsDisconnected {
-			now := r.now()
-			lifecycle := disconnectLifecycle{DisconnectedAtUnixNano: now.UnixNano(), AbandonDeadlineUnixNano: now.Add(DisconnectAbandonAfter).UnixNano()}
-			r.disconnects[ids[i]] = lifecycle
-			r.startAbandonTimer(ids[i], lifecycle.AbandonDeadlineUnixNano)
-		}
 	}
 	hands, _, opener := rules.Deal(rules.Shuffle(rules.GenerateDecks(r.State.DeckCount)), ids)
 	r.playerHands = hands
@@ -1516,6 +1368,10 @@ func (r *Room) handleChallenge(playerID, connID string, ev *ws.ChallengeEvent) {
 	}
 	if r.State.StackCount == 0 || r.State.TopPlay == nil {
 		r.reject(playerID, connID, "INVALID_CHALLENGE", "Nothing to challenge")
+		return
+	}
+	if r.State.TopPlay.PlayerID == playerID {
+		r.reject(playerID, connID, "CANNOT_CHALLENGE_SELF", "You cannot challenge your own play")
 		return
 	}
 	if !r.isActivePlayer(r.State.TopPlay.PlayerID) {

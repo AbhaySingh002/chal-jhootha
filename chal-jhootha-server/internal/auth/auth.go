@@ -28,15 +28,20 @@ import (
 
 const (
 	CookieName      = "cj_session"
-	SessionTTL      = 30 * 24 * time.Hour
+	SessionTTL      = 10 * 365 * 24 * time.Hour
 	GuestSessionTTL = 24 * time.Hour
 	WSTicketTTL     = 45 * time.Second
 )
 
+type EventBroadcaster interface {
+	SendToUser(userID string, payload []byte) bool
+}
+
 type Service struct {
-	Store   *store.Store
-	Runtime *live.Runtime
-	Rooms   *room.Manager
+	Store       *store.Store
+	Runtime     *live.Runtime
+	Rooms       *room.Manager
+	Broadcaster EventBroadcaster
 }
 
 func (s *Service) MarkOnline(ctx context.Context, user *store.User) {

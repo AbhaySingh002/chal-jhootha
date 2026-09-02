@@ -1,5 +1,7 @@
 package ws
 
+import "time"
+
 type Suit string
 
 const (
@@ -23,7 +25,6 @@ const (
 	RoleActive          PlayerRole = "active"
 	RoleWinnerSpectator PlayerRole = "winner_spectator"
 	RoleSpectator       PlayerRole = "spectator"
-	RoleAbandoned       PlayerRole = "abandoned"
 )
 
 type Player struct {
@@ -35,7 +36,6 @@ type Player struct {
 	HandCount         int        `json:"handCount"`
 	IsDisconnected    bool       `json:"isDisconnected"`
 	IsWinner          bool       `json:"isWinner"`
-	IsAbandoned       bool       `json:"isAbandoned"`
 	Role              PlayerRole `json:"role,omitempty"`
 	BluffsAttempted   int        `json:"bluffsAttempted,omitempty"`
 	BluffsCaught      int        `json:"bluffsCaught,omitempty"`
@@ -95,6 +95,8 @@ type GameState struct {
 	ClaimedRank         *Rank             `json:"claimedRank"`
 	CurrentTurnPlayerID *string           `json:"currentTurnPlayerId"`
 	RoundOpenerID       *string           `json:"roundOpenerId"`
+	TurnDeadlineUnixMs  *int64            `json:"turnDeadlineUnixMs,omitempty"`
+	TurnDurationMs      int               `json:"turnDurationMs,omitempty"`
 	LastAction          *LastAction       `json:"lastAction"`
 	TopPlay             *TopPlay          `json:"topPlay,omitempty"`
 	Winners             []string          `json:"winners,omitempty"`
@@ -221,6 +223,8 @@ type GameStateEvent struct {
 	ClaimedRank           *Rank             `json:"claimedRank"`
 	CurrentTurnPlayerID   *string           `json:"currentTurnPlayerId"`
 	RoundOpenerID         *string           `json:"roundOpenerId"`
+	TurnDeadlineUnixMs    *int64            `json:"turnDeadlineUnixMs,omitempty"`
+	TurnDurationMs        int               `json:"turnDurationMs,omitempty"`
 	LastAction            *LastAction       `json:"lastAction"`
 	TopPlay               *TopPlay          `json:"topPlay,omitempty"`
 	Winners               []string          `json:"winners,omitempty"`
@@ -314,12 +318,6 @@ type PlayerReconnectedEvent struct {
 	PlayerID string `json:"playerId"`
 }
 
-type PlayerAbandonedEvent struct {
-	Type     string `json:"type"`
-	Seq      int    `json:"seq"`
-	PlayerID string `json:"playerId"`
-}
-
 type DeviceSupersededEvent struct {
 	Type   string `json:"type"`
 	Seq    int    `json:"seq"`
@@ -340,4 +338,14 @@ type ReactionBroadcast struct {
 	PlayerID    string `json:"playerId"`
 	PlayerName  string `json:"playerName"`
 	Emoji       string `json:"emoji"`
+}
+
+type RoomInviteServerEvent struct {
+	Type        string    `json:"type"` // "room_invite"
+	Token       string    `json:"token"`
+	RoomCode    string    `json:"roomCode"`
+	HostID      string    `json:"hostId"`
+	HostName    string    `json:"hostName"`
+	RecipientID string    `json:"recipientId"`
+	ExpiresAt   time.Time `json:"expiresAt"`
 }

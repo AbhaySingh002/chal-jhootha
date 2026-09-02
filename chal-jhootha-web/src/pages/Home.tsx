@@ -4,7 +4,7 @@ import { ArrowRight, Plus, Shield, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useSession } from '../lib/auth';
 import { useGameStore } from '../state/gameStore';
-import { disconnectSocket } from '../ws/socket';
+import { connectSocket, disconnectSocket } from '../ws/socket';
 import { Navbar } from '../components/Navbar';
 
 export const Home: React.FC = () => {
@@ -19,9 +19,13 @@ export const Home: React.FC = () => {
   const isRegistered = session?.user.isRegistered === true;
 
   useEffect(() => {
-    disconnectSocket();
+    if (!isRegistered) {
+      disconnectSocket();
+    } else {
+      void connectSocket();
+    }
     resetSession();
-  }, [resetSession]);
+  }, [resetSession, isRegistered]);
 
   useEffect(() => {
     if (roomCode && gameState?.roomCode === roomCode) {

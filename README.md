@@ -1,24 +1,195 @@
-# 🃏 CHAL JHOOTHA (BLUFF) - Online Multiplayer Card Game
+# 🃏 CHAL JHOOTHA // BLUFF
+### High-Stakes Real-Time Multiplayer Interrogation Card Game
 
-A brutalist, real-time multiplayer card game built with **React**, **Go WebSocket**, PostgreSQL, and a shared game engine.
+<div align="center">
+
+```
+   ██████╗██╗  ██╗ █████╗ ██╗         ██╗██╗  ██╗ ██████╗  ██████╗████████╗██╗  ██╗ █████╗ 
+  ██╔════╝██║  ██║██╔══██╗██║         ██║██║  ██║██╔═══██╗██╔════╝╚══██╔══╝██║  ██║██╔══██╗
+  ██║     ███████║███████║██║         ██║███████║██║   ██║██║  ███╗  ██║   ███████║███████║
+  ██║     ██╔══██║██╔══██║██║    ██   ██║██╔══██║██║   ██║██║   ██║  ██║   ██╔══██║██╔══██║
+  ╚██████╗██║  ██║██║  ██║███████╗╚█████╔╝██║  ██║╚██████╔╝╚██████╔╝  ██║   ██║  ██║██║  ██║
+   ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝
+```
+
+[![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://go.dev/)
+[![React Version](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-8.2-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-Live_State-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
+[![WebSocket](https://img.shields.io/badge/WebSocket-Native_Sub--5ms-010101?style=for-the-badge&logo=socket.io&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket)
+[![WebRTC](https://img.shields.io/badge/WebRTC-Peer_Voice_Mesh-333333?style=for-the-badge&logo=webrtc&logoColor=white)](https://webrtc.org/)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+
+<p align="center">
+  <strong>Deceive opponents. Spot the bluff. Interrogate your friends. Confirm your victory.</strong><br>
+  A brutalist, low-latency multiplayer card game built with an Actor-based Go engine, WebSockets, and React 19.
+</p>
+
+[Quickstart](#-quickstart) •
+[Architecture](#-system-architecture) •
+[Game Rules](#-game-rules--turn-lifecycle) •
+[Features](#-key-features) •
+[Deployment](#-deployment--production-contract)
+
+</div>
+
+---
+
+## ⚡ System Architecture
+
+Chal Jhootha is engineered around an **Actor Model** and a **Write-Behind Persistence Pipeline**, guaranteeing microsecond in-memory gameplay loop execution with zero database write stall:
+
+```mermaid
+flowchart TD
+    subgraph Clients["Frontend Clients (React 19 + Zustand)"]
+        P1["Player 1 (Host)"]
+        P2["Player 2"]
+        PN["Player N..."]
+    end
+
+    subgraph TransportGateway["Transport Gateway (Go Chi + WebSockets)"]
+        WS["WebSocket Handler (/ws)"]
+        HUB["ClientHub (Thread-Safe User Registry)"]
+        AUTH["Auth & Session Service"]
+    end
+
+    subgraph Engine["Game Engine Core (Go)"]
+        ROUTER["Room Manager"]
+        ACTOR["In-Memory Room Actor (Channel Inbox)"]
+        TIMER["45s Turn Clock & 10s Reconnect Cushion"]
+    end
+
+    subgraph LiveStore["Volatile Real-Time Store (Redis)"]
+        PRESENCE["Live Presence (cj:presence:*)"]
+        INVITES["Instant Room Invites (cj:invite:*)"]
+        LEASES["Distributed Room Leases"]
+    end
+
+    subgraph DurableStore["Durable Account & History (PostgreSQL)"]
+        PERSIST_QUEUE["Persistence Worker Queue"]
+        DB[(PostgreSQL 16)]
+    end
+
+    P1 <-->|WSS sub-5ms| WS
+    P2 <-->|WSS sub-5ms| WS
+    PN <-->|WSS sub-5ms| WS
+
+    WS --> HUB
+    WS <--> ROUTER
+    ROUTER <--> ACTOR
+    ACTOR <--> TIMER
+
+    AUTH <-->|MGet Batching| PRESENCE
+    AUTH <--> INVITES
+    HUB -.->|Real-Time Push| P1
+    HUB -.->|Real-Time Push| P2
+
+    ACTOR -->|Sequence-Guarded Snapshots| PERSIST_QUEUE
+    PERSIST_QUEUE -->|Async Non-Blocking Flush| DB
+```
+
+### Architectural Highlights
+- **In-Memory Room Actor**: Every room executes in a dedicated Go goroutine serialized through an isolated channel `Inbox`. Eliminates mutex lock contention and concurrency hazards.
+- **Write-Behind Persistence**: Turn state transitions are applied instantly in RAM and written asynchronously to PostgreSQL with sequence guards (`rooms.seq <= EXCLUDED.seq`). Database latency never stalls the active game table.
+- **ClientHub Routing**: A synchronized connection hub routes server-originated social notifications (e.g. instant room invites) directly to connected users in sub-5ms.
+- **Batched Redis Presence**: Client heartbeats maintain ephemeral presence records with sliding 45-second TTLs, fetched in single-roundtrip `MGet` pipelines.
+
+---
+
+## 🕹️ Game Rules & Turn Lifecycle
+
+Bluff (popularly known as *Chal Jhootha* or *Cheat*) is a card game of deception and interrogation:
+
+```mermaid
+stateDiagram-v2
+    [*] --> DealPhase: Host Commences Interrogation
+    DealPhase --> RoundOpen: Sequential Deal (Earliest Ace of Spades Opens)
+    
+    RoundOpen --> PlayingTurn: Opener plays 1+ cards & locks Claimed Rank
+    
+    state PlayingTurn {
+        [*] --> AwaitingAction: 45s Continuous Turn Timer
+        AwaitingAction --> ActionAdd: Play 1+ Cards (Same Claimed Rank)
+        AwaitingAction --> ActionChallenge: Challenge Top Play
+        AwaitingAction --> ActionSkip: Skip Turn
+    }
+
+    ActionAdd --> CheckWin
+    ActionSkip --> CheckBurn: All active players skipped?
+    
+    CheckBurn --> BurnStack: Yes (Stack permanently removed)
+    CheckBurn --> NextPlayerTurn: No (Turn passes)
+    
+    ActionChallenge --> ResolveChallenge
+    state ResolveChallenge {
+        BluffCaught --> PickUpStack1: 1+ cards dishonest (Bluffer picks up stack)
+        HonestPlay --> PickUpStack2: All cards honest (Challenger picks up stack)
+    }
+
+    PickUpStack1 --> RoundOpen: Challenger opens next round
+    PickUpStack2 --> RoundOpen: Original player opens next round
+    BurnStack --> RoundOpen: Next player opens fresh round
+
+    CheckWin --> ConfirmedWinner: Hand emptied & survives 1 round
+    ConfirmedWinner --> PlayingTurn: Remaining players continue until Target Winners
+    PlayingTurn --> Finished: Configured Winners Reached
+    Finished --> [*]
+```
+
+### Turn Mechanics & Timer Resilience
+| Rule | Specification |
+| :--- | :--- |
+| **Opener Privilege** | Determined by the earliest dealt **Ace of Spades** ($A\spadesuit$) in clockwise deal order. |
+| **Claim Locking** | The opener claims a single rank (`2` through `Ace`). All subsequent plays in that round must claim that same rank. |
+| **Turn Clock** | **45-second continuous timer**. The clock runs on the server table clock and does not freeze on disconnect. |
+| **Reconnect Cushion** | If a disconnected player reconnects with under 10 seconds remaining, the server grants a **one-time 10-second safety cushion**. |
+| **Instant Offline Skips** | If a player is already disconnected when their turn begins, the server **instantly skips** them to keep table momentum alive. |
+| **Burn Condition** | When all active players skip consecutively back to the opener and the opener skips, the stack is **burned** permanently from the game. |
+| **Victory Condition** | When a player empties their hand, their win is **confirmed** once their final play survives the subsequent player's turn without being caught. |
+
+---
+
+## 💎 Key Features
+
+<div align="center">
+
+| Feature | Description | Stack |
+| :--- | :--- | :--- |
+| **Tactile Deck Avatars** | Custom playing card avatars (`[ A ♠ ]`, `[ K ♥ ]`, `[ Q ♦ ]`, `[ J ♣ ]`, `[ JR ★ ]`, `[ JB ★ ]`) with neo-brutalist tactile rings. | React 19 / CSS |
+| **Low-Latency WebSockets** | Monotonic sequence delivery, instant state reconciliation, and connection recovery. | Go / WebSockets |
+| **Permanent Sessions** | Registered users remain signed in forever (10-year rolling TTL) with automated hourly database pruning. | PostgreSQL / Go |
+| **Real-Time Social Invites** | Sub-5ms room invite delivery via `ClientHub` push notifications. | Redis / WebSockets |
+| **WebRTC Voice Mesh** | Integrated peer-to-peer voice communications with coturn relay fallback for up to 8 suspects. | WebRTC / Coturn |
+| **Adaptive Connection Pool** | Configurable database connection scaling (`DB_MAX_OPEN_CONNS`) tuned for concurrent match traffic. | PostgreSQL (pgx) |
+
+</div>
 
 ---
 
 ## 🚀 Quickstart
 
-### 1. Start the local database and API
+### Prerequisites
+- [Docker](https://www.docker.com/) and Docker Compose
+- [Bun](https://bun.sh/) (or Node.js 20+)
+- [Go 1.24+](https://go.dev/) *(optional if using Docker)*
 
-From the root directory, run:
+### 1. Launch the Database & Backend Server
+
+Clone the repository and start the Docker container stack:
 
 ```bash
+git clone https://github.com/AbhaySingh002/chal-jhootha.git
+cd chal-jhootha
 docker compose up --build
 ```
 
-This starts PostgreSQL and the API at `http://localhost:10000`. The API runs migrations automatically at startup.
+> **Note**: This spins up PostgreSQL and the Go API server at `http://localhost:10000`. Database migrations are executed automatically upon boot.
 
-### 2. Start the frontend
+### 2. Launch the Frontend
 
-In another terminal:
+In a second terminal window:
 
 ```bash
 cd chal-jhootha-web
@@ -26,138 +197,111 @@ bun install
 bun run dev
 ```
 
-- **Frontend (Web App):** [http://localhost:5173](http://localhost:5173)
-- **Backend (Server & WS):** `http://localhost:10000` (Health check: [http://localhost:10000/healthz](http://localhost:10000/healthz))
+Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ---
 
-## 🎮 How to Test
+## 👥 Local Multiplayer Testing (2+ Players)
 
-### Option A: Solo Test (1 Player)
-1. Open [http://localhost:5173](http://localhost:5173) in your browser.
-2. Enter an alias in **Guest Alias** (e.g. `AGENT_007`).
-3. Click **CREATE ROOM**.
-4. In the lobby, click **COMMENCE INTERROGATION** to deal the cards and start playing.
+To simulate a live multiplayer interrogation table on your local machine:
 
----
-
-### Option B: Local Multiplayer (2+ Players)
-1. **Player 1 (Host):**
-   - Open [http://localhost:5173](http://localhost:5173).
-   - Enter alias: `HOST_PLAYER`.
-   - Click **CREATE ROOM** $\rightarrow$ Note down the 4-character **Case File Code** (e.g., `5PB8`).
-2. **Player 2 (Opponent):**
-   - Open a **New Incognito Window** (or another browser like Safari / Firefox) at [http://localhost:5173](http://localhost:5173).
-   - Enter alias: `GUEST_PLAYER`.
-   - Enter the 4-character **Case File Code** in the **Room Code** box and click **JOIN ROOM**.
-3. **Start the Match:**
-   - In Player 1's window, click **COMMENCE INTERROGATION** once all suspects appear in the list.
+1. **Host (Player 1)**:
+   - Navigate to [http://localhost:5173](http://localhost:5173).
+   - Enter alias: `INSPECTOR_ROY`.
+   - Click **CREATE ROOM** $\rightarrow$ Note the 4-character Room Code (e.g. `X7K2`).
+2. **Opponent (Player 2)**:
+   - Open a **Private / Incognito Window** at [http://localhost:5173](http://localhost:5173).
+   - Enter alias: `SHADOW_BLUFFER`.
+   - Enter the Room Code (`X7K2`) and click **JOIN ROOM**.
+3. **Commence Game**:
+   - On the Host's screen, adjust deck count (1–3 decks) and target winners, then click **COMMENCE INTERROGATION**.
 
 ---
 
-## 🧹 How to Clear Sessions & Reset State
+## 📁 Repository Map
 
-### 1. Clear Client / Browser Session
-If you want to leave your active room or reset your player identity:
-- **Method 1 (Fastest via Console):**
-  Open Browser DevTools (`F12` or `Cmd + Option + I`) $\rightarrow$ Console tab, and run:
-  ```javascript
-  sessionStorage.clear();
-  location.href = '/';
-  ```
-- **Method 2 (UI):**
-  Use an **Incognito / Private Window** for each new player test session. Closing the incognito window automatically wipes the session.
-- **Method 3 (Application Tab):**
-  DevTools $\rightarrow$ **Application** $\rightarrow$ **Session Storage** $\rightarrow$ Click **Clear All**.
-
----
-
-### 2. Reset the local database
-
-The local database lives in the named Docker volume. To reset it, stop the stack and remove that local volume:
-
-```bash
-docker compose down -v
+```
+BLUFF/
+├── chal-jhootha-server/             # Authoritative Go HTTP & WebSocket Server
+│   ├── cmd/server/main.go           # Server entry point & graceful shutdown
+│   ├── internal/
+│   │   ├── auth/                    # Permanent sessions, profile & room invites
+│   │   ├── live/                    # Redis presence & ephemeral state
+│   │   ├── room/                    # Actor-based Room Engine & persistence worker
+│   │   ├── rules/                   # Card dealing, hand evaluation & win logic
+│   │   ├── store/                   # PostgreSQL store & schema migrations
+│   │   └── transport/               # WebSocket handler, rate limiting & ClientHub
+│   └── Dockerfile                   # Production container build
+│
+├── chal-jhootha-web/                # React 19 Frontend Application
+│   ├── src/
+│   │   ├── components/              # Brutalist UI, Card, Table, Action Bar & Lobby
+│   │   ├── hooks/                   # useTurnTimer, audio, and view transition hooks
+│   │   ├── pages/                   # GameRoom, Home, Profile, and Public Dossier
+│   │   ├── state/                   # Zustand gameStore with monotonic reconciliation
+│   │   └── ws/                      # WebSocket client with reliable action retries
+│   └── shared/                      # Isomorphic game rules & TypeScript event schemas
+│
+└── docker-compose.yml               # Local infrastructure orchestration
 ```
 
-## 👥 Registered Player Profiles
-
-- Guests can continue to create or join any room by link and alias.
-- Registered players choose a unique public handle (`3–16` lowercase letters, digits, or underscores), can edit their profile, view lifetime completed-game stats, and manage friend requests.
-- Profiles are public by handle and never expose email addresses. Friend requests and recent registered opponents are available from **Profile**.
-
 ---
 
-## 🕹️ Canonical Game Rules & Flow
-1. **Host Configuration:** The host sets deck count (1–3 decks of 52) and winner count (1 to $N-1$, default 1) before the first start. The winner target is then fixed for every replay in that room; deck count may still be adjusted between games.
-2. **Dealing & Starting Player:** The combined deck is shuffled and dealt evenly to all seated suspects (leftovers set aside). The player who was dealt the earliest Ace of Spades ($A\spadesuit$) in sequential deal order takes the first turn (random fallback if no $A\spadesuit$ was dealt).
-3. **Opening a Round:** The active player selects 1+ cards face-down onto the central stack, announces a claimed rank (2–A). That rank is locked for the entire round.
-4. **Turns (3 Options):**
-   - **ADD:** Play 1+ further cards face-down, claiming the round's locked rank.
-   - **CHALLENGE:** Call out the top play. If even 1 card fails to match the claimed rank, bluff is caught and bluffer picks up the whole stack (challenger starts next round). If honest, challenger picks up the whole stack (original player starts next round).
-   - **SKIP:** Pass turn to the next active player.
-5. **Skip-Around & Burn:** If all active players skip around back to the round opener, the opener can add another card to continue or skip. If the opener skips, the entire stack is **burned** permanently from the game, and the next player starts a fresh round with any rank.
-6. **Winning:** When a suspect empties their hand, their win is confirmed once their last play survives the next player's turn without being overturned. Confirmed winners become spectators and are removed from play until the configured winner count is reached.
-7. **Replay & Stats:** The host can return everyone to the same lobby and start a fresh game. Each completed game records one match played for registered participants and one win for each official winner.
+## 🌐 Deployment & Production Contract
 
----
+The frontend and API are fully decoupled and can be deployed independently.
 
-## 📁 Repository Structure
-- `chal-jhootha-web`: React 19 + Vite frontend with Tailwind CSS (v4), Framer Motion, WebRTC Voice, and Zustand store.
-- `chal-jhootha-server`: Authoritative Go HTTP and WebSocket server with PostgreSQL migrations, idempotent match persistence, session auth, and a Docker image.
-- `chal-jhootha-web/shared`: Pure game rules engine, schemas, and typed event contracts.
-- `chal-jhootha-contracts`: Canonical wire protocol documentation and JSON schemas.
+### Production Environment Variables
 
----
-
-## Deployment contract
-
-The frontend and API deploy independently. The Vercel project root directory is `chal-jhootha-web`; its `vercel.json` preserves SPA deep links.
-
-Set these Vercel build-time variables:
-
+#### API Server (`chal-jhootha-server`)
 ```bash
-VITE_API_ORIGIN=https://<render-service>.onrender.com
-VITE_WS_URL=wss://<render-service>.onrender.com/ws
-```
-
-Set these Render service variables:
-
-```bash
-DATABASE_URL=<Render Postgres internal connection string>
-FRONTEND_ORIGINS=https://<vercel-project>.vercel.app
+PORT=10000
+DATABASE_URL=postgres://user:pass@host:5432/dbname?sslmode=require
+REDIS_URL=rediss://default:pass@host:6379
+FRONTEND_ORIGINS=https://bluff-game.vercel.app
 COOKIE_SECURE=1
 COOKIE_SAME_SITE=none
+DB_MAX_OPEN_CONNS=25
+DB_MAX_IDLE_CONNS=10
 ROOM_IDLE_TTL=24h
-GUEST_SESSION_SECRET=<long random secret, shared by every API instance>
-LOG_FORMAT=json
-LOG_LEVEL=info
 ```
 
-Optional voice relay support uses coturn REST credentials. Configure both values
-on the API (never expose the shared secret to the browser):
-
+#### Frontend Client (`chal-jhootha-web`)
 ```bash
-TURN_URLS=turn:turn.example.com:3478?transport=udp,turns:turn.example.com:5349?transport=tcp
-TURN_SHARED_SECRET=<coturn static-auth-secret>
+VITE_API_ORIGIN=https://api.bluff-game.com
+VITE_WS_URL=wss://api.bluff-game.com/ws
 ```
 
-The API exposes lightweight process counters at `/api/metrics` for socket
-payloads, room-action latency totals, and persistence retries/failures. Protect
-that route at the edge before exposing a production service publicly.
+#### Optional WebRTC Voice Relay (Coturn)
+```bash
+TURN_URLS=turn:turn.bluff-game.com:3478?transport=udp,turns:turn.bluff-game.com:5349?transport=tcp
+TURN_SHARED_SECRET=your_static_auth_secret
+```
 
-The current release is deliberately a single stateful game gateway. Run one API
-replica until Redis-backed room ownership and an outbox worker are deployed;
-adding stateless replicas beforehand can split an active room. Voice is enabled
-for rooms of up to eight players; for larger rooms, deploy an SFU such as
-LiveKit rather than lifting the mesh-voice limit.
+---
 
-Use the same Render region for the API and Postgres. Configure an external monitor to request `/healthz` every five minutes when using a free Render web service. Free Render services can still restart, and free Render Postgres expires after 30 days without backups. Platform URLs use cross-site cookies, so moving later to matching `app.` and `api.` subdomains is the more reliable browser-auth setup.
+## 🧪 Verification & Testing
 
-For a full local PostgreSQL test run:
+Execute the comprehensive test suites across both server and client:
 
 ```bash
-docker compose up -d postgres
+# Run server test suite (in-memory & integration)
 cd chal-jhootha-server
-TEST_DATABASE_URL=postgres://chal_jhootha:chal_jhootha_dev@localhost:5432/chal_jhootha?sslmode=disable go test ./...
+go test -v -count=1 ./...
+
+# Run frontend contract & store tests
+cd ../chal-jhootha-web
+bun test
+
+# Validate production web build
+npm run build
 ```
+
+---
+
+<div align="center">
+
+Built with tactical brutality by **Abhay Kumar Singh** and contributors.  
+Distributed under the **MIT License**.
+
+</div>

@@ -132,6 +132,27 @@ func (r *Runtime) IsOnline(ctx context.Context, userID string) (bool, error) {
 	return count > 0, err
 }
 
+func (r *Runtime) AreOnline(ctx context.Context, userIDs []string) (map[string]bool, error) {
+	result := make(map[string]bool, len(userIDs))
+	if r == nil || r.client == nil || len(userIDs) == 0 {
+		return result, nil
+	}
+	keys := make([]string, len(userIDs))
+	for i, id := range userIDs {
+		keys[i] = presencePrefix + id
+	}
+	vals, err := r.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return result, err
+	}
+	for i, val := range vals {
+		if val != nil {
+			result[userIDs[i]] = true
+		}
+	}
+	return result, nil
+}
+
 func (r *Runtime) PutInvite(ctx context.Context, token, recipientID, payload string) error {
 	pipe := r.client.TxPipeline()
 	pipe.Set(ctx, invitePrefix+token, payload, 10*time.Minute)

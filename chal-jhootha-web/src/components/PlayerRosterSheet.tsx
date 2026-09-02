@@ -83,8 +83,8 @@ export function PlayerRosterSheet({
                         )}
                       </div>
                       <p className="mt-0.5 flex items-center gap-1.5 font-mono text-xs text-ink-muted">
-                        {player.isDisconnected && !player.isAbandoned ? <WifiOff size={12} strokeWidth={2.5} /> : null}
-                        {player.isAbandoned ? 'Abandoned' : player.isDisconnected ? 'Away' : `${cardCount} cards`}
+                        {player.isDisconnected ? <WifiOff size={12} strokeWidth={2.5} /> : null}
+                        {player.isDisconnected ? 'Away' : `${cardCount} cards`}
                       </p>
                     </div>
 

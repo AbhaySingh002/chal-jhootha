@@ -191,3 +191,13 @@ func TestWSTicketRejectedWhenOriginMissingAndTicketRemainsUsable(t *testing.T) {
 	require.NoError(t, err)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 }
+
+func TestClientHub(t *testing.T) {
+	ch := make(chan []byte, 1)
+	transport.Hub.Register("user-hub-test", "conn1", ch)
+	require.True(t, transport.Hub.SendToUser("user-hub-test", []byte("hello")))
+	require.Equal(t, "hello", string(<-ch))
+
+	transport.Hub.Unregister("user-hub-test", "conn1")
+	require.False(t, transport.Hub.SendToUser("user-hub-test", []byte("hello")))
+}

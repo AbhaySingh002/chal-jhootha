@@ -47,7 +47,7 @@ func main() {
 	defer stopRuntime()
 
 	rm := room.NewManager(st, liveRuntime)
-	authSvc := &auth.Service{Store: st, Runtime: liveRuntime, Rooms: rm}
+	authSvc := &auth.Service{Store: st, Runtime: liveRuntime, Rooms: rm, Broadcaster: transport.Hub}
 	rm.Restore()
 	rm.StartPersistenceWorker(runtimeCtx)
 	rm.StartJanitor(runtimeCtx)

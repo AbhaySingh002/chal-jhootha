@@ -42,14 +42,6 @@ func TestGetNextPlayerID(t *testing.T) {
 			expected: "p3",
 		},
 		{
-			name:      "skips abandoned",
-			currentID: "p1",
-			players: []ws.Player{
-				{ID: "p1"}, {ID: "p2", IsAbandoned: true}, {ID: "p3"},
-			},
-			expected: "p3",
-		},
-		{
 			name:      "skips pending empty",
 			currentID: "p1",
 			players: []ws.Player{
@@ -176,7 +168,6 @@ func TestShouldEndGame(t *testing.T) {
 	players = []ws.Player{
 		{ID: "a", IsWinner: true},
 		{ID: "b"},
-		{ID: "c", IsAbandoned: true},
 	}
 	assert.True(t, ShouldEndGame(4, []string{"a"}, players))
 }

@@ -61,7 +61,7 @@ func IsPendingEmpty(p ws.Player, pendingFinishID *string) bool {
 }
 
 func IsInRotation(p ws.Player, pendingFinishID *string) bool {
-	if p.IsWinner || p.IsAbandoned {
+	if p.IsWinner {
 		return false
 	}
 	if IsPendingEmpty(p, pendingFinishID) {
@@ -93,7 +93,7 @@ func GetNextPlayerID(currentID string, players []ws.Player, pendingFinishID *str
 func ActiveCount(players []ws.Player) int {
 	n := 0
 	for _, p := range players {
-		if !p.IsWinner && !p.IsAbandoned {
+		if !p.IsWinner {
 			n++
 		}
 	}

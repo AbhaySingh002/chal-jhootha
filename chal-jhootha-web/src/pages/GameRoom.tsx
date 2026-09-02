@@ -166,9 +166,9 @@ export const GameRoom: React.FC = () => {
     return () => document.removeEventListener('pointerdown', handleClickOutside);
   }, [reactionsOpen]);
 
-  const storedToken = typeof window !== 'undefined' ? sessionStorage.getItem('rejoinToken') : null;
+  const storedPlayerId = typeof window !== 'undefined' ? sessionStorage.getItem('playerId') : null;
   const storedRoom = typeof window !== 'undefined' ? sessionStorage.getItem('roomCode') : null;
-  const hasValidSession = (storedRoom === code && !!storedToken) || !!session?.user?.name || !!joinedName;
+  const hasValidSession = (storedRoom === code && !!storedPlayerId) || !!session?.user?.name || !!joinedName;
   const needsName = !hasValidSession && !gameState;
   const isReconnecting = connectionStatus === 'RECONNECTING' || connectionStatus === 'OFFLINE';
 
@@ -196,8 +196,8 @@ export const GameRoom: React.FC = () => {
       return;
     }
     const savedRoom = sessionStorage.getItem('roomCode');
-    const savedToken = sessionStorage.getItem('rejoinToken');
-    if (savedRoom === code && savedToken) {
+    const savedPlayerId = sessionStorage.getItem('playerId');
+    if (savedRoom === code && savedPlayerId) {
       hasAttemptedJoin.current = true;
       void joinRoom(code, session?.user?.name || 'REJOIN');
     } else if (session?.user?.name) {
@@ -455,7 +455,6 @@ export const GameRoom: React.FC = () => {
         {/* ── Status banners ── */}
         {(isReconnecting || connectionStatus === 'SYNCING') ? <p role="status" className="border-b-2 border-ink bg-evidence-red px-3 py-2 text-center font-mono text-xs font-bold uppercase text-white">{connectionStatus === 'SYNCING' ? 'Syncing room state' : 'Connection lost. Reconnecting.'}</p> : null}
         {yourRole === 'winner_spectator' ? <p className="border-b-2 border-ink bg-confirmed-green px-3 py-2 text-center font-mono text-xs font-bold uppercase text-white">You finished this match. Spectator mode is on.</p> : null}
-        {yourRole === 'abandoned' ? <p className="border-b-2 border-ink bg-surface-muted px-3 py-2 text-center font-mono text-xs font-bold uppercase text-ink-muted">You are no longer active in this match. Spectator mode is on.</p> : null}
         {voiceUnavailable ? <p role="status" className="border-b-2 border-ink bg-surface-muted px-3 py-2 text-center font-mono text-xs font-bold uppercase text-ink-muted">Voice chat is disabled for rooms with more than 8 players.</p> : null}
       </div>
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ConnectionStatus, GameState, ServerEvent, Card, ClaimGroup, PlayerRole } from 'shared';
-import { PROTOCOL_VERSION } from 'shared';
+import { PROTOCOL_VERSION, sortCards } from 'shared';
 import { sendEvent, connectSocket, disconnectSocket } from '../ws/socket';
 import { clearGuest, ensureGuest } from '../lib/auth';
 
@@ -13,7 +13,6 @@ type PendingAction = {
 interface GameStore {
   playerId: string | null;
   roomCode: string | null;
-  rejoinToken: string | null;
   gameState: GameState | null;
   handsCount: Record<string, number>;
   myHand: Card[];
@@ -53,6 +52,8 @@ const emptyState = (): Omit<GameState, 'roomCode' | 'phase' | 'players' | 'hostI
   claimedRank: null,
   currentTurnPlayerId: null,
   roundOpenerId: null,
+  turnDeadlineUnixMs: null,
+  turnDurationMs: 45000,
   lastAction: null,
   winners: [],
   deckCount: 1,
@@ -64,7 +65,6 @@ const emptyState = (): Omit<GameState, 'roomCode' | 'phase' | 'players' | 'hostI
 export const useGameStore = create<GameStore>((set, get) => ({
   playerId: sessionStorage.getItem('playerId'),
   roomCode: sessionStorage.getItem('roomCode'),
-  rejoinToken: sessionStorage.getItem('rejoinToken'),
   gameState: null,
   handsCount: {},
   myHand: [],
@@ -79,24 +79,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
   yourRole: null,
 
   joinRoom: async (roomCode, playerName) => {
-    const existingToken = sessionStorage.getItem('rejoinToken');
     const existingRoom = sessionStorage.getItem('roomCode');
-    const isRejoiningSameRoom = existingRoom === roomCode && !!existingToken;
+    const isRejoiningSameRoom = existingRoom === roomCode && !!sessionStorage.getItem('playerId');
     await ensureGuest(playerName, !isRejoiningSameRoom);
     if (isRejoiningSameRoom) {
       set({ roomCode, lastError: null });
     } else {
-      sessionStorage.removeItem('rejoinToken');
       sessionStorage.removeItem('roomCode');
       sessionStorage.removeItem('playerId');
-      set({ roomCode, lastError: null, gameState: null, playerId: null, rejoinToken: null });
+      set({ roomCode, lastError: null, gameState: null, playerId: null });
     }
     await connectSocket();
     sendEvent({
       type: 'join_room',
       roomCode,
       playerName,
-      rejoinToken: isRejoiningSameRoom ? existingToken ?? undefined : undefined,
       clientMsgId: crypto.randomUUID(),
       protocolVersion: PROTOCOL_VERSION,
     });
@@ -106,8 +103,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     await ensureGuest(playerName, true);
     sessionStorage.removeItem('playerId');
     sessionStorage.removeItem('roomCode');
-    sessionStorage.removeItem('rejoinToken');
-    set({ lastError: null, roomCode: null, gameState: null, playerId: null, rejoinToken: null, lastSeq: 0 });
+    set({ lastError: null, roomCode: null, gameState: null, playerId: null, lastSeq: 0 });
     await connectSocket();
     sendEvent({
       type: 'create_room',
@@ -169,8 +165,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   challenge: () => {
-    const { lastSeq, connectionStatus, youAreController, yourRole, pendingAction } = get();
+    const { gameState, playerId, lastSeq, connectionStatus, youAreController, yourRole, pendingAction } = get();
     if (connectionStatus !== 'CONNECTED' || !youAreController || yourRole !== 'active' || pendingAction) return;
+    if (!gameState?.topPlay || gameState.topPlay.playerId === playerId) return;
     const clientMsgId = crypto.randomUUID();
     set({ pendingAction: { clientMsgId, type: 'challenge', startedAt: Date.now() }, lastError: null });
     sendEvent({
@@ -238,11 +235,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   resetSession: () => {
     sessionStorage.removeItem('playerId');
     sessionStorage.removeItem('roomCode');
-    sessionStorage.removeItem('rejoinToken');
     set({
       playerId: null,
       roomCode: null,
-      rejoinToken: null,
       gameState: null,
       handsCount: {},
       myHand: [],
@@ -276,13 +271,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
         });
         break;
       case 'ack':
-        if (event.rejoinToken && event.playerId && event.roomCode) {
+        if (event.playerId && event.roomCode) {
           sessionStorage.setItem('playerId', event.playerId);
-          sessionStorage.setItem('rejoinToken', event.rejoinToken);
           sessionStorage.setItem('roomCode', event.roomCode);
           set({
             playerId: event.playerId,
-            rejoinToken: event.rejoinToken,
             roomCode: event.roomCode,
           });
         }
@@ -348,6 +341,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
               lastAction: event.lastAction,
               topPlay: event.topPlay ?? safe.topPlay ?? null,
               roundOpenerId: event.roundOpenerId,
+              turnDeadlineUnixMs: event.turnDeadlineUnixMs !== undefined ? event.turnDeadlineUnixMs : safe.turnDeadlineUnixMs,
+              turnDurationMs: event.turnDurationMs ?? safe.turnDurationMs ?? 45000,
               winners: event.winners ?? safe.winners,
               deckCount: event.deckCount ?? safe.deckCount,
               winnerCount: event.winnerCount ?? safe.winnerCount,
@@ -357,7 +352,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               lastMatch: event.lastMatch ?? safe.lastMatch ?? null,
             },
             handsCount: event.hands || {},
-            myHand: event.yourHand || [],
+            myHand: sortCards(event.yourHand || []),
           };
         });
         break;
@@ -396,15 +391,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
           gameState: state.gameState ? {
             ...state.gameState,
             players: state.gameState.players.map((player) => player.id === event.playerId ? { ...player, isDisconnected: false } : player),
-          } : null,
-        });
-        break;
-      case 'player_abandoned':
-        set({
-          lastSeq: event.seq,
-          gameState: state.gameState ? {
-            ...state.gameState,
-            players: state.gameState.players.map((player) => player.id === event.playerId ? { ...player, isAbandoned: true, role: 'abandoned' } : player),
           } : null,
         });
         break;

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -21,6 +22,62 @@ import (
 )
 
 var validate = validator.New()
+
+type ClientHub struct {
+	mu    sync.RWMutex
+	conns map[string]map[string]chan []byte // userID -> connID -> outbound
+}
+
+var Hub = &ClientHub{
+	conns: make(map[string]map[string]chan []byte),
+}
+
+func (h *ClientHub) Register(userID, connID string, out chan []byte) {
+	if h == nil || userID == "" || connID == "" || out == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, ok := h.conns[userID]; !ok {
+		h.conns[userID] = make(map[string]chan []byte)
+	}
+	h.conns[userID][connID] = out
+}
+
+func (h *ClientHub) Unregister(userID, connID string) {
+	if h == nil || userID == "" || connID == "" {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if userConns, ok := h.conns[userID]; ok {
+		delete(userConns, connID)
+		if len(userConns) == 0 {
+			delete(h.conns, userID)
+		}
+	}
+}
+
+func (h *ClientHub) SendToUser(userID string, payload []byte) bool {
+	if h == nil || userID == "" || len(payload) == 0 {
+		return false
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	userConns, ok := h.conns[userID]
+	if !ok || len(userConns) == 0 {
+		return false
+	}
+	sent := false
+	for _, out := range userConns {
+		select {
+		case out <- payload:
+			sent = true
+		default:
+		}
+	}
+	return sent
+}
 
 type session struct {
 	ConnID           string
@@ -69,6 +126,7 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 			IsEphemeralGuest: user.IsEphemeralGuest,
 			Outbound:         make(chan []byte, 128),
 		}
+		Hub.Register(user.ID, connID, sess.Outbound)
 
 		ctx, cancel := context.WithCancel(r.Context())
 		defer cancel()
@@ -97,6 +155,7 @@ func HandleWebSocket(rm *room.Manager, authSvc *auth.Service, origins *auth.Orig
 
 		disconnectReason := "normal"
 		defer func() {
+			Hub.Unregister(sess.UserID, sess.ConnID)
 			duration := time.Since(connStart)
 			remainingConns := logger.DecActiveConnections()
 			if sess.Joined && sess.RoomCode != "" && sess.PlayerID != "" {

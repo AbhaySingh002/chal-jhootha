@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
+import clsx from 'clsx';
 import {
   Check,
   Flame,
+  Loader2,
   LogIn,
   LogOut,
   Search,
@@ -33,6 +35,15 @@ import { Navbar } from '../components/Navbar';
 
 type TabType = 'overview' | 'friends' | 'find';
 type SearchResult = { profile: PlayerProfile; friendshipState: FriendshipState };
+
+const AVATAR_OPTIONS = [
+  { id: 'ace-spades', label: 'Ace of Spades', rank: 'A', suit: '♠', isRed: false },
+  { id: 'king-hearts', label: 'King of Hearts', rank: 'K', suit: '♥', isRed: true },
+  { id: 'queen-diamonds', label: 'Queen of Diamonds', rank: 'Q', suit: '♦', isRed: true },
+  { id: 'jack-clubs', label: 'Jack of Clubs', rank: 'J', suit: '♣', isRed: false },
+  { id: 'joker-red', label: 'Red Joker', rank: 'JR', suit: '★', isRed: true },
+  { id: 'joker-black', label: 'Black Joker', rank: 'JB', suit: '★', isRed: false },
+];
 
 
 
@@ -146,14 +157,43 @@ export const Profile: React.FC = () => {
     }
   };
 
+  // Debounced search for player handles
+  useEffect(() => {
+    const query = searchHandle.trim().toLowerCase();
+    if (query.length < 3) {
+      setSearchResult(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      setError('');
+      setRequestError('');
+      try {
+        const res = await getPublicProfile(query);
+        setSearchResult(res);
+      } catch (cause) {
+        setSearchResult(null);
+        if (searchHandle.trim().toLowerCase() === query) {
+          setError(cause instanceof Error ? cause.message : 'Player not found.');
+        }
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchHandle]);
+
   const findPlayer = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!searchHandle.trim()) return;
+    const query = searchHandle.trim().toLowerCase();
+    if (!query) return;
     setIsSearching(true);
     setError('');
     setRequestError('');
     try {
-      const res = await getPublicProfile(searchHandle.trim().toLowerCase());
+      const res = await getPublicProfile(query);
       setSearchResult(res);
     } catch (cause) {
       setSearchResult(null);
@@ -176,10 +216,22 @@ export const Profile: React.FC = () => {
   const respondToRequest = async (id: string, accept: boolean) => {
     setError('');
     setRequestError('');
+    const target = friends.find((f) => f.id === id);
+    if (!target) return;
+
+    // Optimistic UI mutation
+    setFriends((prev) => {
+      if (accept) {
+        return prev.map((f) => f.id === id ? { ...f, direction: 'friend' as const, status: 'accepted' as const } : f);
+      }
+      return prev.filter((f) => f.id !== id);
+    });
+
     try {
       await respondToFriendRequest(id, accept);
       refreshSocial();
     } catch (cause) {
+      refreshSocial();
       setError(cause instanceof Error ? cause.message : 'Unable to update friend request.');
     }
   };
@@ -187,10 +239,14 @@ export const Profile: React.FC = () => {
   const unfriend = async (id: string) => {
     if (!window.confirm('Remove this friend?')) return;
     setError('');
+    const previous = friends;
+    // Optimistic removal
+    setFriends((prev) => prev.filter((f) => f.id !== id));
     try {
       await removeFriendship(id);
       refreshSocial();
     } catch (cause) {
+      setFriends(previous);
       setError(cause instanceof Error ? cause.message : 'Unable to remove friend.');
     }
   };
@@ -401,23 +457,51 @@ export const Profile: React.FC = () => {
                 )}
 
                 {profile && (
-                  <div>
-                    <label htmlFor="profile-avatar" className="mb-1 block font-mono text-xs font-bold uppercase tracking-[0.1em]">
+                  <div className="sm:col-span-2">
+                    <label id="profile-avatar-label" className="mb-2 block font-mono text-xs font-bold uppercase tracking-[0.1em]">
                       Deck Avatar
                     </label>
-                    <select
-                      id="profile-avatar"
-                      value={avatarId}
-                      onChange={(event) => setAvatarId(event.target.value)}
-                      className="brutal-input min-h-11 text-sm"
+                    <div
+                      role="radiogroup"
+                      aria-labelledby="profile-avatar-label"
+                      className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-2.5"
                     >
-                      <option value="ace-spades">Ace of Spades</option>
-                      <option value="king-hearts">King of Hearts</option>
-                      <option value="queen-diamonds">Queen of Diamonds</option>
-                      <option value="jack-clubs">Jack of Clubs</option>
-                      <option value="joker-red">Red Joker</option>
-                      <option value="joker-black">Black Joker</option>
-                    </select>
+                      {AVATAR_OPTIONS.map((opt) => {
+                        const isSelected = avatarId === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={isSelected}
+                            onClick={() => setAvatarId(opt.id)}
+                            className={clsx(
+                              "relative flex flex-col items-center justify-between p-2 rounded-lg border-2 text-left h-24 sm:h-28 transition-all select-none",
+                              isSelected
+                                ? "border-ink bg-caution-yellow shadow-[3px_3px_0_var(--color-ink)] scale-[1.03]"
+                                : "border-ink/35 bg-surface hover:border-ink hover:bg-surface-muted hover:-translate-y-0.5 active:scale-95"
+                            )}
+                          >
+                            <div className="flex w-full items-center justify-between">
+                              <span className={clsx("font-display text-sm sm:text-base font-bold leading-none", opt.isRed ? "text-evidence-red" : "text-ink")}>
+                                {opt.rank}
+                              </span>
+                              {isSelected && (
+                                <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-ink text-paper" aria-hidden="true">
+                                  <Check size={9} strokeWidth={3.5} />
+                                </span>
+                              )}
+                            </div>
+                            <span className={clsx("font-display text-2xl sm:text-3xl leading-none select-none my-auto", opt.isRed ? "text-evidence-red" : "text-ink")}>
+                              {opt.suit}
+                            </span>
+                            <span className="w-full truncate text-center font-mono text-[9px] sm:text-[10px] font-bold text-ink-muted">
+                              {opt.label}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
@@ -602,13 +686,20 @@ export const Profile: React.FC = () => {
             <section className="brutal-card p-5 sm:p-6">
               <h2 className="font-display text-2xl uppercase">Find by Handle</h2>
               <form onSubmit={findPlayer} className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-                <input
-                  value={searchHandle}
-                  onChange={(event) => setSearchHandle(event.target.value.toLowerCase())}
-                  className="brutal-input text-sm"
-                  placeholder="Enter exact handle (e.g. shadow_player)"
-                  autoComplete="off"
-                />
+                <div className="relative">
+                  <input
+                    value={searchHandle}
+                    onChange={(event) => setSearchHandle(event.target.value.toLowerCase())}
+                    className="brutal-input text-sm pr-10"
+                    placeholder="Enter player handle (e.g. shadow_player)"
+                    autoComplete="off"
+                  />
+                  {isSearching && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted">
+                      <Loader2 size={16} className="animate-spin text-ink" />
+                    </div>
+                  )}
+                </div>
                 <button
                   type="submit"
                   disabled={isSearching || !searchHandle.trim()}
@@ -618,6 +709,17 @@ export const Profile: React.FC = () => {
                   <span>{isSearching ? 'Searching...' : 'Find Player'}</span>
                 </button>
               </form>
+              <p className="mt-2 font-mono text-[11px] text-ink-muted">
+                {searchHandle.trim().length === 0
+                  ? 'Type 3 or more characters to search players automatically.'
+                  : searchHandle.trim().length < 3
+                  ? `Need ${3 - searchHandle.trim().length} more character${3 - searchHandle.trim().length === 1 ? '' : 's'}...`
+                  : isSearching
+                  ? 'Searching player records...'
+                  : searchResult
+                  ? 'Match found!'
+                  : 'Press Enter or click Find Player to search.'}
+              </p>
 
               {searchResult && (
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-2 border-ink bg-paper p-3.5 shadow-[2px_2px_0_var(--color-ink)]">

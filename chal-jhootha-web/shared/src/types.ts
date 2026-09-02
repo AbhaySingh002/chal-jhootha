@@ -1,7 +1,7 @@
 export type Suit = 'c' | 'd' | 'h' | 's';
 export type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A';
 
-export type PlayerRole = 'active' | 'winner_spectator' | 'spectator' | 'abandoned';
+export type PlayerRole = 'active' | 'winner_spectator' | 'spectator';
 export type ConnectionStatus = 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'OFFLINE' | 'SYNCING';
 
 export interface Card {
@@ -34,7 +34,6 @@ export interface Player {
   handCount: number;
   isDisconnected: boolean;
   isWinner: boolean;
-  isAbandoned?: boolean;
   role?: PlayerRole;
   bluffsAttempted?: number;
   bluffsCaught?: number;
@@ -53,6 +52,8 @@ export interface GameState {
   claimedRank: Rank | null;
   currentTurnPlayerId: string | null;
   roundOpenerId: string | null;
+  turnDeadlineUnixMs?: number | null;
+  turnDurationMs?: number;
   lastAction: {
     playerId: string;
     type: 'add' | 'challenge' | 'skip' | 'won';

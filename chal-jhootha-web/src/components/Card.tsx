@@ -97,7 +97,7 @@ export const Card: React.FC<CardProps> = ({
       exit={{ opacity: 0, y: -100, scale: 0.8 }}
     >
       {faceDown || !card ? (
-        // Card Back (Confidential Evidence with Devanagari watermark)
+        // Card Back (Confidential Evidence with English watermark)
         <div
           className="w-full h-full flex items-center justify-center p-1.5 sm:p-2 rounded-xl sm:rounded-2xl"
           style={{ background: 'var(--card-back-bg)' }}

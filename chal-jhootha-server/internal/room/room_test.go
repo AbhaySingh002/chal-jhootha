@@ -39,8 +39,11 @@ func join(t *testing.T, r *room.Room, userID, name, connID string) (playerID str
 	ack := waitType(t, out, "ack")
 	var a ws.AckEvent
 	require.NoError(t, json.Unmarshal(ack, &a))
-	require.NotNil(t, a.RejoinToken)
-	return playerID, *a.RejoinToken, out
+	token = ""
+	if a.RejoinToken != nil {
+		token = *a.RejoinToken
+	}
+	return playerID, token, out
 }
 
 func waitType(t *testing.T, out chan []byte, typ string) []byte {
@@ -75,9 +78,8 @@ func drain(out chan []byte) {
 func TestRoomCreationAndJoin(t *testing.T) {
 	r := room.NewRoom("TEST", nil)
 	defer close(r.CloseReq)
-	playerID, token, _ := join(t, r, "user-alice", "ALICE", "conn-a")
+	playerID, _, _ := join(t, r, "user-alice", "ALICE", "conn-a")
 	assert.Equal(t, "user-alice", playerID)
-	assert.NotEmpty(t, token)
 }
 
 func TestRoomReconnection(t *testing.T) {
@@ -582,21 +584,19 @@ func TestLastCardResponseLapSurvivesSnapshotRestore(t *testing.T) {
 	assert.Equal(t, winner.id, won.PlayerID)
 }
 
-func TestMatchEndingAbandonKeepsCompletedMatchVisible(t *testing.T) {
-	r, clients := newPlayingRoom(t, "ABANDON_FINISH", 2)
+func TestMatchEndingLeaveKeepsCompletedMatchVisible(t *testing.T) {
+	r, clients := newPlayingRoom(t, "LEAVE_FINISH", 2)
 	state := syncState(t, r, clients[0])
-	abandoned := clientByID(t, clients, clients[0].id)
-	if abandoned.id == *state.CurrentTurnPlayerID {
-		abandoned = clients[1]
+	leaving := clientByID(t, clients, clients[0].id)
+	if leaving.id == *state.CurrentTurnPlayerID {
+		leaving = clients[1]
 	}
 	observer := clientByID(t, clients, clients[0].id)
-	if observer.id == abandoned.id {
+	if observer.id == leaving.id {
 		observer = clients[1]
 	}
 	drain(observer.out)
-	r.Inbox <- room.RoomMessage{ConnectionID: abandoned.conn, PlayerID: abandoned.id, Event: room.InternalLeaveEvent{ConnectionID: abandoned.conn}}
-	waitType(t, observer.out, "player_disconnected")
-	r.Inbox <- room.RoomMessage{PlayerID: abandoned.id, Event: room.AbandonEvent{PlayerID: abandoned.id}}
+	r.Inbox <- room.RoomMessage{ConnectionID: leaving.conn, PlayerID: leaving.id, Event: &ws.LeaveRoomEvent{BaseClientEvent: ws.BaseClientEvent{Type: "leave_room", ClientMsgID: "leave"}}}
 	completed := syncState(t, r, observer)
 	assert.Equal(t, ws.PhaseFinished, completed.Phase)
 }

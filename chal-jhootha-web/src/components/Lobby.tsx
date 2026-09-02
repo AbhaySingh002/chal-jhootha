@@ -41,7 +41,7 @@ export const Lobby: React.FC<LobbyProps> = ({ completedMatch = false }) => {
   const rosterNeedsScroll = playerCount > 4;
   const isRegistered = session?.user?.isRegistered === true;
   const lastMatchNames = (gameState?.lastMatch?.winnerIds ?? []).map((winnerID) => gameState?.players.find((player) => player.id === winnerID)?.name || 'Unknown');
-  const requiredReturnees = (gameState?.players ?? []).filter((player) => !player.isDisconnected && !player.isAbandoned);
+  const requiredReturnees = (gameState?.players ?? []).filter((player) => !player.isDisconnected);
   const returnedPlayerIDs = new Set(gameState?.resultsLobbyPlayerIds ?? []);
   const missingReturnees = requiredReturnees.filter((player) => !returnedPlayerIDs.has(player.id));
   const resultsLobbyReady = missingReturnees.length === 0;

@@ -220,11 +220,14 @@ func (s *Service) HandleFriendships(w http.ResponseWriter, r *http.Request) {
 		writeProfileError(w, err)
 		return
 	}
-	if s.Runtime != nil {
+	if s.Runtime != nil && len(friends) > 0 {
+		userIDs := make([]string, len(friends))
 		for i := range friends {
-			online, err := s.Runtime.IsOnline(r.Context(), friends[i].Profile.UserID)
-			if err == nil {
-				friends[i].Online = online
+			userIDs[i] = friends[i].Profile.UserID
+		}
+		if onlineMap, err := s.Runtime.AreOnline(r.Context(), userIDs); err == nil {
+			for i := range friends {
+				friends[i].Online = onlineMap[friends[i].Profile.UserID]
 			}
 		}
 	}
@@ -283,6 +286,18 @@ func (s *Service) HandleCreateRoomInvite(w http.ResponseWriter, r *http.Request)
 	if err := s.Runtime.PutInvite(r.Context(), invite.Token, invite.RecipientID, string(raw)); err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "could not send invitation"})
 		return
+	}
+	if s.Broadcaster != nil {
+		eventPayload, _ := json.Marshal(map[string]any{
+			"type":        "room_invite",
+			"token":       invite.Token,
+			"roomCode":    invite.RoomCode,
+			"hostId":      invite.HostID,
+			"hostName":    invite.HostName,
+			"recipientId": invite.RecipientID,
+			"expiresAt":   invite.ExpiresAt.Format(time.RFC3339),
+		})
+		s.Broadcaster.SendToUser(body.TargetUserID, eventPayload)
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"invite": invite})
 }
