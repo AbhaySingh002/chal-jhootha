@@ -17,7 +17,7 @@ Built with an actor-isolated Go engine, sub-5ms native WebSockets, Redis presenc
 
 <br />
 
-<img src="./assets/card-spread.svg" alt="Card Showcase" width="100%" />
+<img src="./assets/card-spread.png" alt="Card Showcase" width="100%" />
 
 </div>
 
