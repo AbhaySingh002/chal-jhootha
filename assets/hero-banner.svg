@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="45%" r="65%">
+      <stop offset="0%" stop-color="#1B1D22"/>
+      <stop offset="60%" stop-color="#111215"/>
+      <stop offset="100%" stop-color="#0B0C0E"/>
+    </radialGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E2C992"/>
+      <stop offset="50%" stop-color="#C5A059"/>
+      <stop offset="100%" stop-color="#9E7A36"/>
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#D0D2D8"/>
+    </linearGradient>
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <!-- Canvas Background -->
+  <rect width="1200" height="420" fill="url(#bgGlow)"/>
+
+  <!-- Subtle Blueprint Grid Pattern -->
+  <g opacity="0.04" stroke="#FFFFFF" stroke-width="1">
+    <line x1="100" y1="0" x2="100" y2="420"/>
+    <line x1="300" y1="0" x2="300" y2="420"/>
+    <line x1="500" y1="0" x2="500" y2="420"/>
+    <line x1="700" y1="0" x2="700" y2="420"/>
+    <line x1="900" y1="0" x2="900" y2="420"/>
+    <line x1="1100" y1="0" x2="1100" y2="420"/>
+    <line x1="0" y1="70" x2="1200" y2="70"/>
+    <line x1="0" y1="140" x2="1200" y2="140"/>
+    <line x1="0" y1="210" x2="1200" y2="210"/>
+    <line x1="0" y1="280" x2="1200" y2="280"/>
+    <line x1="0" y1="350" x2="1200" y2="350"/>
+  </g>
+
+  <!-- Elegant Outer Frame -->
+  <rect x="24" y="24" width="1152" height="372" rx="16" fill="none" stroke="#26282E" stroke-width="1.2"/>
+  <rect x="32" y="32" width="1136" height="356" rx="12" fill="none" stroke="#1D1F24" stroke-width="1"/>
+
+  <!-- Corner Notch Marks -->
+  <path d="M24,48 L48,24 M1176,48 L1152,24 M24,372 L48,396 M1176,372 L1152,396" stroke="#C5A059" stroke-width="1.5" opacity="0.6"/>
+
+  <!-- Background Decorative Fanned Playing Cards (Left & Right) -->
+  <g opacity="0.08" transform="translate(180, 210) rotate(-18)" stroke="#E0E2EC" stroke-width="1.5" fill="none">
+    <rect x="-60" y="-90" width="120" height="180" rx="8"/>
+    <path d="M0,-30 L0,30 M-30,0 L30,0"/>
+  </g>
+  <g opacity="0.12" transform="translate(230, 205) rotate(-6)" stroke="#E0E2EC" stroke-width="1.5" fill="none">
+    <rect x="-60" y="-90" width="120" height="180" rx="8"/>
+    <circle cx="0" cy="0" r="24"/>
+  </g>
+  <g opacity="0.08" transform="translate(1020, 210) rotate(18)" stroke="#E0E2EC" stroke-width="1.5" fill="none">
+    <rect x="-60" y="-90" width="120" height="180" rx="8"/>
+    <path d="M0,-30 L0,30 M-30,0 L30,0"/>
+  </g>
+  <g opacity="0.12" transform="translate(970, 205) rotate(6)" stroke="#E0E2EC" stroke-width="1.5" fill="none">
+    <rect x="-60" y="-90" width="120" height="180" rx="8"/>
+    <circle cx="0" cy="0" r="24"/>
+  </g>
+
+  <!-- Central Header Content -->
+  <g text-anchor="middle">
+    <!-- Top Pill Badge -->
+    <g transform="translate(600, 78)">
+      <rect x="-140" y="-14" width="280" height="28" rx="14" fill="#181A1F" stroke="#2D3039" stroke-width="1"/>
+      <circle cx="-116" cy="0" r="4" fill="#4ADE80"/>
+      <text x="-104" y="4" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif" font-size="10.5" font-weight="600" fill="#9BA1B0" letter-spacing="0.16em">
+        REAL-TIME MULTIPLAYER
+      </text>
+      <text x="76" y="4" font-family="monospace" font-size="10.5" font-weight="700" fill="#E2C992">
+        // BLUFF
+      </text>
+    </g>
+
+    <!-- Main Title -->
+    <text x="600" y="180" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Outfit', 'Helvetica Neue', sans-serif" font-size="64" font-weight="900" fill="url(#textGrad)" letter-spacing="-0.03em" filter="url(#softShadow)">
+      CHAL JHOOTHA
+    </text>
+
+    <!-- Subtitle / Tagline -->
+    <text x="600" y="222" font-family="'Georgia', 'Newsreader', 'Times New Roman', serif" font-style="italic" font-size="20" fill="url(#goldGrad)" letter-spacing="0.04em">
+      High-Stakes Deception, Spot the Bluff &amp; Confirm the Win
+    </text>
+
+    <!-- Playing Card Suits Row -->
+    <g transform="translate(600, 275)" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="22" font-weight="bold">
+      <circle cx="0" cy="-4" r="24" fill="#16181D" stroke="#2D3039" stroke-width="1"/>
+      <!-- Spades -->
+      <text x="-90" y="4" fill="#D2D5DF">♠</text>
+      <line x1="-65" y1="-4" x2="-45" y2="-4" stroke="#32353E" stroke-width="1"/>
+      <!-- Hearts -->
+      <text x="-24" y="4" fill="#E54D47">♥</text>
+      <!-- Center Star / Joker -->
+      <text x="0" y="4" font-size="16" fill="#C5A059">★</text>
+      <!-- Diamonds -->
+      <text x="24" y="4" fill="#E54D47">♦</text>
+      <line x1="45" y1="-4" x2="65" y2="-4" stroke="#32353E" stroke-width="1"/>
+      <!-- Clubs -->
+      <text x="90" y="4" fill="#D2D5DF">♣</text>
+    </g>
+
+    <!-- Feature Strip / Spec Pills -->
+    <g transform="translate(600, 345)" font-family="ui-monospace, 'SF Mono', 'Geist Mono', monospace" font-size="11" font-weight="600">
+      <text x="0" y="0" fill="#787C87" letter-spacing="0.08em">
+        <tspan fill="#A8ABB4">GO ACTOR ENGINE</tspan>
+        <tspan fill="#41444D">  ·  </tspan>
+        <tspan fill="#A8ABB4">SUB-5MS WEBSOCKETS</tspan>
+        <tspan fill="#41444D">  ·  </tspan>
+        <tspan fill="#A8ABB4">45S CONTINUOUS CLOCK</tspan>
+        <tspan fill="#41444D">  ·  </tspan>
+        <tspan fill="#A8ABB4">REACT 19</tspan>
+      </text>
+    </g>
+  </g>
+</svg>

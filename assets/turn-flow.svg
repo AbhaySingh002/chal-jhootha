@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 260" width="1000" height="260">
+  <defs>
+    <filter id="boxShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+    <marker id="dotArrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6">
+      <circle cx="5" cy="5" r="3" fill="#C5A059"/>
+    </marker>
+  </defs>
+
+  <!-- Container Base -->
+  <rect width="1000" height="260" rx="16" fill="#111215" stroke="#22242B" stroke-width="1.2"/>
+
+  <!-- Section Header -->
+  <text x="40" y="38" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="11" font-weight="700" fill="#C5A059" letter-spacing="0.18em">
+    GAMEPLAY ENGINE // THE INTERROGATION CYCLE
+  </text>
+  <line x1="40" y1="52" x2="960" y2="52" stroke="#1E2027" stroke-width="1"/>
+
+  <!-- Horizontal Progress Rail -->
+  <line x1="140" y1="135" x2="860" y2="135" stroke="#23252E" stroke-width="2" stroke-dasharray="4,4"/>
+
+  <!-- ==================== STEP 1 ==================== -->
+  <g transform="translate(40, 72)" filter="url(#boxShadow)">
+    <rect width="205" height="152" rx="12" fill="#16181D" stroke="#262831" stroke-width="1"/>
+    <!-- Step Badge -->
+    <rect x="16" y="16" width="28" height="20" rx="6" fill="#20222A" stroke="#2D303A" stroke-width="0.8"/>
+    <text x="30" y="30" font-family="monospace" font-size="10" font-weight="bold" fill="#C5A059" text-anchor="middle">01</text>
+    <text x="52" y="31" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">Deal &amp; Open</text>
+    
+    <text x="16" y="66" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11" fill="#9296A1" width="170">
+      <tspan x="16" dy="0">1–3 decks dealt evenly.</tspan>
+      <tspan x="16" dy="16">Player with earliest</tspan>
+      <tspan x="16" dy="16" fill="#E2C992" font-weight="bold">Ace of Spades (A♠)</tspan>
+      <tspan x="16" dy="16">takes the opening turn.</tspan>
+    </text>
+  </g>
+
+  <!-- ==================== STEP 2 ==================== -->
+  <g transform="translate(285, 72)" filter="url(#boxShadow)">
+    <rect width="205" height="152" rx="12" fill="#16181D" stroke="#262831" stroke-width="1"/>
+    <rect x="16" y="16" width="28" height="20" rx="6" fill="#20222A" stroke="#2D303A" stroke-width="0.8"/>
+    <text x="30" y="30" font-family="monospace" font-size="10" font-weight="bold" fill="#C5A059" text-anchor="middle">02</text>
+    <text x="52" y="31" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">Lock Claim</text>
+    
+    <text x="16" y="66" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11" fill="#9296A1">
+      <tspan x="16" dy="0">Opener plays 1+ cards</tspan>
+      <tspan x="16" dy="16">face-down and declares a</tspan>
+      <tspan x="16" dy="16" fill="#E2C992" font-weight="bold">Claimed Rank (2–A).</tspan>
+      <tspan x="16" dy="16">Rank is locked for round.</tspan>
+    </text>
+  </g>
+
+  <!-- ==================== STEP 3 ==================== -->
+  <g transform="translate(530, 72)" filter="url(#boxShadow)">
+    <rect width="205" height="152" rx="12" fill="#16181D" stroke="#363945" stroke-width="1.2"/>
+    <rect x="16" y="16" width="28" height="20" rx="6" fill="#2D281E" stroke="#4A3D24" stroke-width="0.8"/>
+    <text x="30" y="30" font-family="monospace" font-size="10" font-weight="bold" fill="#E2C992" text-anchor="middle">03</text>
+    <text x="52" y="31" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">45s Turn Clock</text>
+    
+    <!-- Action Pills -->
+    <g transform="translate(16, 54)">
+      <rect width="52" height="18" rx="5" fill="#27221A" stroke="#423420" stroke-width="0.8"/>
+      <text x="26" y="13" font-family="monospace" font-size="9" font-weight="bold" fill="#E2C992" text-anchor="middle">ADD</text>
+      
+      <rect x="58" width="62" height="18" rx="5" fill="#2E1C1D" stroke="#502728" stroke-width="0.8"/>
+      <text x="89" y="13" font-family="monospace" font-size="9" font-weight="bold" fill="#E55651" text-anchor="middle">BLUFF?</text>
+      
+      <rect x="126" width="46" height="18" rx="5" fill="#1C2126" stroke="#2C3642" stroke-width="0.8"/>
+      <text x="149" y="13" font-family="monospace" font-size="9" font-weight="bold" fill="#7E9EB8" text-anchor="middle">SKIP</text>
+    </g>
+
+    <text x="16" y="94" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11" fill="#9296A1">
+      <tspan x="16" dy="0">10s cushion on reconnect.</tspan>
+      <tspan x="16" dy="16" fill="#7A7E89">Offline players skipped</tspan>
+      <tspan x="16" dy="16" fill="#7A7E89">instantly to keep flow.</tspan>
+    </text>
+  </g>
+
+  <!-- ==================== STEP 4 ==================== -->
+  <g transform="translate(775, 72)" filter="url(#boxShadow)">
+    <rect width="185" height="152" rx="12" fill="#16181D" stroke="#262831" stroke-width="1"/>
+    <rect x="16" y="16" width="28" height="20" rx="6" fill="#20222A" stroke="#2D303A" stroke-width="0.8"/>
+    <text x="30" y="30" font-family="monospace" font-size="10" font-weight="bold" fill="#C5A059" text-anchor="middle">04</text>
+    <text x="52" y="31" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">Resolution</text>
+    
+    <text x="16" y="66" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11" fill="#9296A1">
+      <tspan x="16" dy="0" fill="#E55651">Caught</tspan> <tspan>→ Takes stack</tspan>
+      <tspan x="16" dy="16" fill="#4ADE80">Honest</tspan> <tspan>→ Challenger takes</tspan>
+      <tspan x="16" dy="16" fill="#E2C992">All Skip</tspan> <tspan>→ Stack is</tspan>
+      <tspan x="16" dy="16" fill="#E2C992" font-weight="bold">BURNED permanently.</tspan>
+    </text>
+  </g>
+</svg>

@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 260" width="1000" height="260">
+  <defs>
+    <filter id="archShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Container Base -->
+  <rect width="1000" height="260" rx="16" fill="#111215" stroke="#22242B" stroke-width="1.2"/>
+
+  <!-- Section Title -->
+  <text x="40" y="38" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="11" font-weight="700" fill="#C5A059" letter-spacing="0.18em">
+    SYSTEM ARCHITECTURE // LOW-LATENCY WEBSOCKET TOPOLOGY
+  </text>
+  <line x1="40" y1="52" x2="960" y2="52" stroke="#1E2027" stroke-width="1"/>
+
+  <!-- Connecting Lines -->
+  <!-- Client to Gateway -->
+  <line x1="240" y1="140" x2="330" y2="140" stroke="#373B47" stroke-width="2" stroke-dasharray="4,4"/>
+  <circle cx="285" cy="140" r="4" fill="#61DAFB"/>
+  
+  <!-- Gateway to Redis -->
+  <path d="M 640 115 L 720 105" fill="none" stroke="#DC382D" stroke-width="1.8" stroke-dasharray="3,3" opacity="0.8"/>
+  
+  <!-- Gateway to PostgreSQL -->
+  <path d="M 640 165 L 720 175" fill="none" stroke="#4169E1" stroke-width="1.8" stroke-dasharray="3,3" opacity="0.8"/>
+
+  <!-- ==================== NODE 1: CLIENTS ==================== -->
+  <g transform="translate(40, 72)" filter="url(#archShadow)">
+    <rect width="200" height="152" rx="12" fill="#16181D" stroke="#262831" stroke-width="1"/>
+    <!-- Header -->
+    <rect x="16" y="16" width="34" height="20" rx="6" fill="#1B2631" stroke="#253E54" stroke-width="0.8"/>
+    <text x="33" y="30" font-family="monospace" font-size="9.5" font-weight="bold" fill="#61DAFB" text-anchor="middle">UI</text>
+    <text x="58" y="31" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">Browser Clients</text>
+    
+    <g transform="translate(16, 56)" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="11" fill="#9296A1">
+      <text y="0">• React 19 &amp; Tailwind v4</text>
+      <text y="20">• Zustand Client State</text>
+      <text y="40">• Sub-5ms WebSocket (WSS)</text>
+      <text y="60">• WebRTC Mesh Voice</text>
+    </g>
+  </g>
+
+  <!-- ==================== NODE 2: GO SERVER CORE ==================== -->
+  <g transform="translate(330, 72)" filter="url(#archShadow)">
+    <rect width="310" height="152" rx="12" fill="#16181D" stroke="#3D382B" stroke-width="1.2"/>
+    <!-- Header -->
+    <rect x="16" y="16" width="34" height="20" rx="6" fill="#292318" stroke="#4B3D23" stroke-width="0.8"/>
+    <text x="33" y="30" font-family="monospace" font-size="9.5" font-weight="bold" fill="#E2C992" text-anchor="middle">GO</text>
+    <text x="58" y="31" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">Game Server Gateway &amp; Actors</text>
+    
+    <!-- Sub-blocks inside Go server -->
+    <g transform="translate(16, 54)">
+      <!-- Box 1: ClientHub -->
+      <rect width="130" height="42" rx="6" fill="#1C1E25" stroke="#2B2E39" stroke-width="0.8"/>
+      <text x="12" y="18" font-family="monospace" font-size="10" font-weight="bold" fill="#D2D5DF">ClientHub</text>
+      <text x="12" y="32" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="9" fill="#787C87">Real-time Push Invites</text>
+
+      <!-- Box 2: Room Actor -->
+      <rect x="142" width="136" height="42" rx="6" fill="#1C1E25" stroke="#2B2E39" stroke-width="0.8"/>
+      <text x="154" y="18" font-family="monospace" font-size="10" font-weight="bold" fill="#D2D5DF">Room Actor</text>
+      <text x="154" y="32" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="9" fill="#787C87">Channel Inbox Loop</text>
+
+      <!-- Box 3: Table Clock -->
+      <rect y="48" width="278" height="30" rx="6" fill="#1F1B15" stroke="#383020" stroke-width="0.8"/>
+      <text x="12" y="67" font-family="monospace" font-size="9.5" font-weight="600" fill="#E2C992">45s Turn Timer · 10s Reconnect Cushion</text>
+    </g>
+  </g>
+
+  <!-- ==================== NODE 3: STORAGE TOPOLOGY ==================== -->
+  <!-- Redis -->
+  <g transform="translate(720, 72)" filter="url(#archShadow)">
+    <rect width="240" height="68" rx="10" fill="#16181D" stroke="#262831" stroke-width="1"/>
+    <rect x="14" y="14" width="28" height="18" rx="5" fill="#2E1716" stroke="#4F2321" stroke-width="0.8"/>
+    <text x="28" y="27" font-family="monospace" font-size="9" font-weight="bold" fill="#E55651" text-anchor="middle">R7</text>
+    <text x="50" y="28" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">Redis Live State</text>
+    <text x="14" y="52" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="10" fill="#8C909B">MGet Presence &amp; Ephemeral Invites</text>
+  </g>
+
+  <!-- Postgres -->
+  <g transform="translate(720, 156)" filter="url(#archShadow)">
+    <rect width="240" height="68" rx="10" fill="#16181D" stroke="#262831" stroke-width="1"/>
+    <rect x="14" y="14" width="28" height="18" rx="5" fill="#182030" stroke="#26395A" stroke-width="0.8"/>
+    <text x="28" y="27" font-family="monospace" font-size="9" font-weight="bold" fill="#648FE8" text-anchor="middle">PG</text>
+    <text x="50" y="28" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">PostgreSQL 16</text>
+    <text x="14" y="52" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="10" fill="#8C909B">Asynchronous Write-Behind Matches</text>
+  </g>
+</svg>
